@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.math.BigDecimal;
 
 import static com.example.banking.controller.AccountControllerTest.expectError;
+import static com.example.banking.controller.TestHeaders.withValidHeaders;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,7 +45,7 @@ class TransferControllerTest {
     private TransferService transferService;
 
     private ResultActions postJson(String body) throws Exception {
-        return mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body));
+        return mockMvc.perform(withValidHeaders(post(URL)).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     @Test
@@ -132,12 +133,12 @@ class TransferControllerTest {
 
     @Test
     void rejectsWrongHttpMethodWith405() throws Exception {
-        expectError(mockMvc.perform(get(URL)).andExpect(status().isMethodNotAllowed()), "METHOD_NOT_ALLOWED");
+        expectError(mockMvc.perform(withValidHeaders(get(URL))).andExpect(status().isMethodNotAllowed()), "METHOD_NOT_ALLOWED");
     }
 
     @Test
     void rejectsNonJsonContentTypeWith415() throws Exception {
-        expectError(mockMvc.perform(post(URL).contentType(MediaType.TEXT_PLAIN).content("hello"))
+        expectError(mockMvc.perform(withValidHeaders(post(URL)).contentType(MediaType.TEXT_PLAIN).content("hello"))
                 .andExpect(status().isUnsupportedMediaType()), "UNSUPPORTED_MEDIA_TYPE");
     }
 }
