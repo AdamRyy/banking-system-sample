@@ -2,13 +2,12 @@ package com.example.banking.dto;
 
 import com.example.banking.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class ErrorResponseTest {
 
@@ -20,8 +19,18 @@ class ErrorResponseTest {
 
         assertEquals("INSUFFICIENT_FUNDS", response.code());
         assertEquals("no money", response.message());
-        assertTrue(response.timestamp() != null);
-        assertEquals(null, response.correlationId());
+        assertNotNull(response.timestamp());
+        assertNull(response.correlationId());
+    }
+
+    @Test
+    void ofCarriesTheGivenCorrelationId() {
+        assertEquals("abc-123", ErrorResponse.of(ErrorCode.NOT_FOUND, "x", "abc-123").correlationId());
+    }
+
+    @Test
+    void ofStatusUsesTheStatusNameAsCode() {
+        assertEquals("NOT_ACCEPTABLE", ErrorResponse.of(HttpStatus.NOT_ACCEPTABLE, "x", null).code());
     }
 
     @Test

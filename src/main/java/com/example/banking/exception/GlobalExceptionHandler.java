@@ -1,8 +1,12 @@
 package com.example.banking.exception;
 
+import com.example.banking.config.RequestHeadersInterceptor;
 import com.example.banking.dto.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -11,6 +15,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -37,6 +43,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<ErrorResponse> handleInsufficientFunds(InsufficientFundsException ex) {
         return build(ErrorCode.INSUFFICIENT_FUNDS, ex.getMessage());
+    }
+
+    // ---- Required headers ---------------------------------------------------
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException ex) {
+        // The HTTP spec requires WWW-Authenticate on every 401: it tells the client which scheme to use.
+        return ResponseEntity.status(ErrorCode.UNAUTHORIZED.getStatus())
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ErrorResponse.of(ErrorCode.UNAUTHORIZED, ex.getMessage(), currentCorrelationId()));
+    }
+
+    @ExceptionHandler(MissingCorrelationIdException.class)
+    public ResponseEntity<ErrorResponse> handleMissingCorrelationId(MissingCorrelationIdException ex) {
+        return build(ErrorCode.MISSING_CORRELATION_ID, ex.getMessage());
     }
 
     // ---- Request validation / parsing -------------------------------------
@@ -100,11 +122,28 @@ public class GlobalExceptionHandler {
     /** Anything unexpected: log the details, but never leak them to the client. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
+        // Spring MVC client errors without a dedicated handler (e.g. 406) carry their own status.
+        if (ex instanceof org.springframework.web.ErrorResponse springError
+                && springError.getStatusCode().is4xxClientError()) {
+            HttpStatus status = HttpStatus.valueOf(springError.getStatusCode().value());
+            return ResponseEntity.status(status)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(ErrorResponse.of(status, springError.getBody().getDetail(), currentCorrelationId()));
+        }
         log.error("Unhandled exception", ex);
         return build(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred");
     }
 
     private static ResponseEntity<ErrorResponse> build(ErrorCode code, String message) {
-        return ResponseEntity.status(code.getStatus()).body(ErrorResponse.of(code, message));
+        // Explicit content type: errors stay JSON even if the client's Accept header asks for something else.
+        return ResponseEntity.status(code.getStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ErrorResponse.of(code, message, currentCorrelationId()));
+    }
+
+    private static String currentCorrelationId() {
+        return RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
+                ? RequestHeadersInterceptor.correlationIdOf(attributes.getRequest())
+                : null;
     }
 }
