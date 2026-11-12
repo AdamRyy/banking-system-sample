@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AccountController.class)
-@Import(WebConfig.class)
+@Import({WebConfig.class, FixedClockConfig.class})
 class RequestHeadersInterceptorTest {
 
     private static final String URL = "/api/v1/accounts/1/limits";

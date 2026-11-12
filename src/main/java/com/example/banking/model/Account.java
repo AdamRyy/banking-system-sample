@@ -1,30 +1,41 @@
 package com.example.banking.model;
 
+import com.example.banking.exception.InsufficientFundsException;
+import com.example.banking.exception.TransferLimitExceededException;
 import com.example.banking.util.MoneyUtils;
 import lombok.Getter;
-import lombok.Setter;
 
 import java.math.BigDecimal;
 
+/**
+ * Read access is public. State changes only through {@link #debit(BigDecimal)}, which keeps
+ * the balance and the used limit consistent.
+ */
 @Getter
-@Setter
 public class Account {
 
-    private Long id;
+    private final Long id;
     private BigDecimal balance;
-    private Limits limits;
+    private final Limits limits;
 
     public Account() {
-        this.id = 1L;
-        this.balance = new BigDecimal("5000.00");
-        this.limits = new Limits();
+        this(1L, new BigDecimal("5000.00"), new Limits());
     }
 
-    public void setBalance(BigDecimal balance) {
+    public Account(Long id, BigDecimal balance, Limits limits) {
+        this.id = id;
         this.balance = MoneyUtils.normalize(balance);
+        this.limits = limits;
     }
 
-    public boolean hasSufficientFunds(BigDecimal amount) {
-        return balance.compareTo(amount) >= 0;
+    public void debit(BigDecimal amount) {
+        if (!limits.allow(amount)) {
+            throw new TransferLimitExceededException(id, amount, limits.getRemaining());
+        }
+        if (amount.compareTo(balance) > 0) {
+            throw new InsufficientFundsException(id, amount, balance);
+        }
+        balance = balance.subtract(amount);
+        limits.use(amount);
     }
 }

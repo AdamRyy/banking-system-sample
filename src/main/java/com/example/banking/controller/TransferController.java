@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/transfers")
+@RequestMapping("api/v1/transfers")
 @RequiredArgsConstructor
 public class TransferController {
 

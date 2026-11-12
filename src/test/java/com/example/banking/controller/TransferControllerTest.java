@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TransferController.class)
-@Import(WebConfig.class)
+@Import({WebConfig.class, FixedClockConfig.class})
 class TransferControllerTest {
 
     private static final String URL = "/api/v1/transfers";
@@ -102,6 +103,7 @@ class TransferControllerTest {
             "{\"sourceId\":1,\"amount\":100}",                    // missing targetId
             "{\"sourceId\":1,\"targetId\":2,\"amount\":0}",       // zero amount
             "{\"sourceId\":1,\"targetId\":2,\"amount\":-10.50}",  // negative amount
+            "{\"sourceId\":1,\"targetId\":2,\"amount\":100.555}", // more than 2 decimal places
             "{\"sourceId\":1,\"targetId\":2}"                     // missing amount
     })
     void rejectsInvalidRequestWith400(String body) throws Exception {
@@ -122,6 +124,25 @@ class TransferControllerTest {
         expectError(postJson("{\"sourceId\":0,\"targetId\":2,\"amount\":0}")
                 .andExpect(status().isBadRequest()), "VALIDATION_FAILED")
                 .andExpect(jsonPath("$.message").value("amount: must be greater than 0; sourceId: must be greater than 0"));
+    }
+
+    @Test
+    void validationMessagesStayEnglishForAnyClientLocale() throws Exception {
+        // spring.web.locale-resolver=fixed: Accept-Language must not switch Bean Validation's language.
+        expectError(mockMvc.perform(withValidHeaders(post(URL))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "pl-PL")
+                        .content("{\"sourceId\":0,\"targetId\":2,\"amount\":0}"))
+                .andExpect(status().isBadRequest()), "VALIDATION_FAILED")
+                .andExpect(jsonPath("$.message").value("amount: must be greater than 0; sourceId: must be greater than 0"));
+    }
+
+    @Test
+    void validationMessageExplainsAmountDigitLimits() throws Exception {
+        expectError(postJson("{\"sourceId\":1,\"targetId\":2,\"amount\":100.555}")
+                .andExpect(status().isBadRequest()), "VALIDATION_FAILED")
+                .andExpect(jsonPath("$.message")
+                        .value("amount: must have max 15 integer digits and 2 decimal places"));
     }
 
     @Test

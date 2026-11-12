@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ApiErrorController.class)
-@Import(WebConfig.class)
+@Import({WebConfig.class, FixedClockConfig.class})
 class ApiErrorControllerTest {
 
     @Autowired
@@ -32,7 +32,7 @@ class ApiErrorControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
                 .andExpect(jsonPath("$.message").value("Bad Request"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").value(FixedClockConfig.NOW))
                 .andExpect(jsonPath("$['X-Correlation-Id']").value(CORRELATION_ID));
     }
 

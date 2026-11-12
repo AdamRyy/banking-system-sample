@@ -13,6 +13,6 @@ public record TransferResponse(Long sourceId, Long targetId, BigDecimal amount, 
                 request.targetId(),
                 MoneyUtils.normalize(request.amount()),
                 source.getBalance(),
-                source.getLimits().getTransfer());
+                source.getLimits().getRemaining());
     }
 }

@@ -15,4 +15,5 @@ public final class MoneyUtils {
     public static BigDecimal normalize(BigDecimal value) {
         return Objects.requireNonNullElse(value, BigDecimal.ZERO).setScale(SCALE, ROUNDING);
     }
+
 }

@@ -3,24 +3,30 @@ package com.example.banking.service;
 import com.example.banking.exception.AccountNotFoundException;
 import com.example.banking.model.Account;
 import com.example.banking.model.Limits;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class AccountService {
-    private final Account acc = new Account();
+
+    private final Account acc;
+
+    public AccountService() {
+        this(new Account());
+    }
+
+    /** Lets tests in this package start from an account with a chosen balance or limit. */
+    protected AccountService(Account acc) {
+        this.acc = acc;
+    }
+
     public Account getAccount(Long accountId) {
-        if(accountId == 1) {
+        if (acc.getId().equals(accountId)) {
             return acc;
         }
         throw new AccountNotFoundException(accountId);
     }
 
     public Limits getLimits(Long accountId) {
-        if(accountId == 1) {
-            return acc.getLimits();
-        }
-        throw new AccountNotFoundException(accountId);
+        return getAccount(accountId).getLimits();
     }
 }

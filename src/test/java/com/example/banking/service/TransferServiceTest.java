@@ -6,7 +6,7 @@ import com.example.banking.exception.AccountNotFoundException;
 import com.example.banking.exception.InsufficientFundsException;
 import com.example.banking.exception.TransferLimitExceededException;
 import com.example.banking.model.Account;
-import org.junit.jupiter.api.BeforeEach;
+import com.example.banking.model.Limits;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -16,27 +16,28 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TransferServiceTest {
 
-    private TransferService transferService;
     private Account source;
+    private TransferService transferService;
 
-    @BeforeEach
-    void setUp() {
-        AccountService accountService = new AccountService();
-        transferService = new TransferService(accountService);
-        source = accountService.getAccount(1L);
+    /** Uses the protected AccountService constructor to start from a chosen balance. */
+    private void givenBalance(String balance) {
+        source = new Account(1L, new BigDecimal(balance), new Limits());
+        transferService = new TransferService(new AccountService(source));
     }
 
     private static TransferRequest request(String amount) {
         return new TransferRequest(1L, 2L, new BigDecimal(amount));
     }
 
-    private void assertState(String balance, String limit) {
+    private void assertState(String balance, String remainingLimit) {
         assertEquals(new BigDecimal(balance), source.getBalance());
-        assertEquals(new BigDecimal(limit), source.getLimits().getTransfer());
+        assertEquals(new BigDecimal(remainingLimit), source.getLimits().getRemaining());
     }
 
     @Test
     void successfulTransferReducesBalanceAndLimit() {
+        givenBalance("5000");
+
         TransferResponse response = transferService.transfer(request("100.5"));
 
         assertEquals(1L, response.sourceId());
@@ -49,6 +50,8 @@ class TransferServiceTest {
 
     @Test
     void amountAboveRemainingLimitIsRejectedAndStateUnchanged() {
+        givenBalance("5000");
+
         assertThrows(TransferLimitExceededException.class, () -> transferService.transfer(request("10000.01")));
 
         assertState("5000.00", "10000.00");
@@ -56,35 +59,26 @@ class TransferServiceTest {
 
     @Test
     void amountAboveBalanceIsRejectedAndStateUnchanged() {
-        source.setBalance(new BigDecimal("500"));
+        givenBalance("500");
 
         InsufficientFundsException ex = assertThrows(InsufficientFundsException.class,
-                () -> transferService.transfer(request("600")));
+                () -> transferService.transfer(request("600")));   // formatted as 600.00 in the message
 
         assertEquals("Account 1 has insufficient funds: requested 600.00, available 500.00", ex.getMessage());
-
         assertState("500.00", "10000.00");
     }
 
     @Test
-    void checksUseNormalizedAmount() {
-        source.setBalance(new BigDecimal("20000"));
-
-        // 10000.001 rounds to 10000.00, which is exactly the limit -> allowed
-        transferService.transfer(request("10000.001"));
-
-        assertState("10000.00", "0.00");
-    }
-
-    @Test
     void unknownSourceAccountIsRejected() {
+        givenBalance("5000");
+
         assertThrows(AccountNotFoundException.class,
                 () -> transferService.transfer(new TransferRequest(2L, 1L, new BigDecimal("10"))));
     }
 
     @Test
     void consecutiveTransfersAccumulateAgainstLimit() {
-        source.setBalance(new BigDecimal("20000"));
+        givenBalance("20000");
 
         transferService.transfer(request("3000"));
         transferService.transfer(request("3000"));

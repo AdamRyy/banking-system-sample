@@ -4,6 +4,7 @@ import com.example.banking.config.RequestHeadersInterceptor;
 import com.example.banking.dto.ErrorResponse;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.webmvc.error.ErrorController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -11,14 +12,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Replaces Spring Boot's default /error handling, so errors that never reach GlobalExceptionHandler
  * (container errors, response.sendError) still use the ErrorResponse format.
- * A plain @Controller on purpose: WebConfig prefixes every @RestController with the API base path,
- * but the container forwards errors to exactly /error.
+ * Mapped to exactly /error, without the /api/v1 prefix the other controllers use: that's the path
+ * the container forwards errors to (server.error.path).
  */
 @Controller
+@RequiredArgsConstructor
 public class ApiErrorController implements ErrorController {
+
+    private final Clock clock;
 
     @RequestMapping("/error")
     public ResponseEntity<ErrorResponse> handleError(HttpServletRequest request) {
@@ -27,7 +34,7 @@ public class ApiErrorController implements ErrorController {
 
         return ResponseEntity.status(status)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ErrorResponse.forStatus(status, correlationId));
+                .body(ErrorResponse.forStatus(status, correlationId, Instant.now(clock)));
     }
 
     private static HttpStatus resolveStatus(HttpServletRequest request) {

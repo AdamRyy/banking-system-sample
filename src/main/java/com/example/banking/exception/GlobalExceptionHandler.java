@@ -2,6 +2,7 @@ package com.example.banking.exception;
 
 import com.example.banking.config.RequestHeadersInterceptor;
 import com.example.banking.dto.ErrorResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpHeaders;
@@ -21,12 +22,17 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    private final Clock clock;
 
     // ---- Domain exceptions -------------------------------------------------
 
@@ -49,11 +55,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException ex) {
-        // The HTTP spec requires WWW-Authenticate on every 401: it tells the client which scheme to use.
         return ResponseEntity.status(ErrorCode.UNAUTHORIZED.getStatus())
                 .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ErrorResponse.of(ErrorCode.UNAUTHORIZED, ex.getMessage(), currentCorrelationId()));
+                .body(ErrorResponse.of(ErrorCode.UNAUTHORIZED, ex.getMessage(), currentCorrelationId(), now()));
     }
 
     @ExceptionHandler(MissingCorrelationIdException.class)
@@ -66,8 +71,6 @@ public class GlobalExceptionHandler {
     /** Invalid @Valid @RequestBody (e.g. TransferRequest). */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleBodyValidation(MethodArgumentNotValidException ex) {
-        // ex.getMessage() is Spring's internal debug text, so build a client-friendly one instead:
-        // "amount: must be greater than 0; differentAccounts: sourceId and targetId must be different"
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .sorted(Comparator.comparing(FieldError::getField))   // stable order for clients/tests
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
@@ -128,17 +131,21 @@ public class GlobalExceptionHandler {
             HttpStatus status = HttpStatus.valueOf(springError.getStatusCode().value());
             return ResponseEntity.status(status)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(ErrorResponse.of(status, springError.getBody().getDetail(), currentCorrelationId()));
+                    .body(ErrorResponse.of(status, springError.getBody().getDetail(), currentCorrelationId(), now()));
         }
         log.error("Unhandled exception", ex);
         return build(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred");
     }
 
-    private static ResponseEntity<ErrorResponse> build(ErrorCode code, String message) {
+    private ResponseEntity<ErrorResponse> build(ErrorCode code, String message) {
         // Explicit content type: errors stay JSON even if the client's Accept header asks for something else.
         return ResponseEntity.status(code.getStatus())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ErrorResponse.of(code, message, currentCorrelationId()));
+                .body(ErrorResponse.of(code, message, currentCorrelationId(), now()));
+    }
+
+    private Instant now() {
+        return Instant.now(clock);
     }
 
     private static String currentCorrelationId() {

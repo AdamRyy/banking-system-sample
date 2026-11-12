@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AccountController.class)
-@Import(WebConfig.class)
+@Import({WebConfig.class, FixedClockConfig.class})
 class AccountControllerTest {
 
     @Autowired
@@ -41,7 +41,7 @@ class AccountControllerTest {
         return actions
                 .andExpect(jsonPath("$.code").value(code))
                 .andExpect(jsonPath("$.message").isNotEmpty())
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").value(FixedClockConfig.NOW))
                 .andExpect(jsonPath("$['X-Correlation-Id']").value(CORRELATION_ID));
     }
 
@@ -51,7 +51,9 @@ class AccountControllerTest {
 
         mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/limits")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.transfer").value(10000.00));
+                .andExpect(jsonPath("$.limit").value(10000.00))
+                .andExpect(jsonPath("$.used").value(0.00))
+                .andExpect(jsonPath("$.remaining").value(10000.00));
     }
 
     @Test

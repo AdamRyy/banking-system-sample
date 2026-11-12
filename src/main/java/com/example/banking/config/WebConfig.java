@@ -11,18 +11,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    private final String basePath;
     private final String securityToken;
 
-    public WebConfig(@Value("${app.api.base-path}") String basePath,
-                     @Value("${app.security.token}") String securityToken) {
-        this.basePath = basePath;
+    public WebConfig(@Value("${app.security.token}") String securityToken) {
         this.securityToken = securityToken;
-    }
-
-    @Override
-    public void configurePathMatch(PathMatchConfigurer configurer) {
-        configurer.addPathPrefix(basePath, HandlerTypePredicate.forAnnotation(RestController.class));
     }
 
     @Override

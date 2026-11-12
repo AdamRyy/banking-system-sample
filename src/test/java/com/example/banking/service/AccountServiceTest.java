@@ -14,7 +14,7 @@ class AccountServiceTest {
 
     @Test
     void getLimitsReturnsLimitsForExistingAccount() {
-        assertEquals(new BigDecimal("10000.00"), accountService.getLimits(1L).getTransfer());
+        assertEquals(new BigDecimal("10000.00"), accountService.getLimits(1L).getLimit());
     }
 
     @Test
