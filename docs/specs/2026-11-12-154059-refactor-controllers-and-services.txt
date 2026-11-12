@@ -1,0 +1,320 @@
+
+
+> /plan refactor current transfer and account controllers and services so they  
+stop useing hardcoded account and they actually work on actual data from h2     
+database via repository layer.                                                  
+  ⎿  Enabled plan mode
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● User answered Claude's questions:
+  ⎿  · Right now a transfer only debits the source (CLAUDE.md: target isn't 
+     touched or checked). With real data in H2, what should a transfer do with 
+     the target account? → Look up + credit target (Recommended)
+     · Should each successful transfer save a TransferHistory row (source 
+     account, counterparty account number, amount, timestamp from the injected 
+     Clock)? → Not yet
+     · Two simultaneous transfers from the same account could both read balance 
+     5000 and overspend. How should that be prevented? →  Optimistic and add 
+     @Version to Account
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+
+> /plan                                                                         
+  ⎿  Current Plan
+     C:\Users\Adam.claude\plans\imperative-imagining-wirth.md
+
+     Plan: Services work on H2 data via repositories (real transfers + 
+     optimistic locking)
+
+     Context
+
+     H2, the entities, AccountRepository and the seed data are in place, but
+     AccountService still holds a hardcoded Account and TransferService debits
+     it in memory. This change moves both services onto the database:
+     - Accounts are loaded through AccountRepository.
+     - A transfer is one @Transactional unit that debits the source and credits 
+       the target (the target must exist, or it's a 404).
+     - Concurrent transfers are guarded by optimistic locking (@Version on 
+       Account).
+
+     TransferHistory is not written yet (user's choice). The controllers keep
+     the same API.
+
+     Changes
+
+     1. Schema + entity: optimistic locking
+
+     - src/main/resources/schema.sql: add version BIGINT DEFAULT 0 NOT NULL to
+       account. The DEFAULT 0 lets data.sql stay unchanged.
+     - model/Account.java:
+       - add @Version private Long version;. Hibernate adds WHERE version = ? to
+         each UPDATE and bumps the value. If 0 rows match, it throws
+         OptimisticLockException, which Spring wraps as
+         ObjectOptimisticLockingFailureException.
+       - add public void credit(BigDecimal amount): balance = 
+         balance.add(amount). There's no limit check, because limits apply only
+         to outgoing money.
+
+     2. service/AccountService.java
+
+     - Remove the hardcoded account and the protected test constructor.
+     - Use @RequiredArgsConstructor with private final AccountRepository 
+       accountRepository.
+     - getAccount(id): accountRepository.findById(id).orElseThrow(() -> new 
+       AccountNotFoundException(id)).
+     - getLimits(id): unchanged signature, marked @Transactional(readOnly = 
+       true).
+
+     3. service/TransferService.java
+
+     @Transactional transfer(request):
+     1. Load the source (404 if it's missing), then the target (404 if it's
+        missing). The source goes first, so the existing "unknown source"
+        behaviour stays.
+     2. source.debit(amount): the limit and funds checks throw 422 before
+        anything changes.
+     3. target.credit(amount).
+     4. Return TransferResponse.from(request, source) (the response shape is
+        unchanged).
+
+     No explicit save() is needed: JPA dirty checking flushes both UPDATEs (each
+     carrying the version check) at commit. A runtime exception rolls the whole
+     transaction back.
+     → The ordering in this method body will be a TODO(human) Learn-by-Doing 
+     piece (which lookups and mutations happen, and in what order).
+
+     4. Error mapping for conflicts (CLAUDE.md error pattern)
+
+     - exception/ErrorCode.java: add
+       CONCURRENT_MODIFICATION(HttpStatus.CONFLICT).
+     - exception/GlobalExceptionHandler.java: add
+       @ExceptionHandler(OptimisticLockingFailureException.class) (the Spring
+       base type), which returns build(CONCURRENT_MODIFICATION, "Account was 
+       modified by another request, please retry").
+
+     The commit happens inside the @Transactional proxy, before control returns
+     to the controller, so this advice still catches the exception.
+
+     5. CLAUDE.md
+
+     Update the intro (state now lives in H2: schema.sql + data.sql, two seed
+     accounts) and the Transfers bullet (source debited, target credited, in one
+     transaction, with @Version → 409).
+
+     Tests
+
+     - service/AccountServiceTest becomes @DataJpaTest 
+       @Import(AccountService.class) against the seed data:
+       - account 1 has the seed values
+       - getLimits(1L) returns 10000.00
+       - an unknown id (99) throws AccountNotFoundException
+     - service/TransferServiceTest becomes @DataJpaTest 
+       @Import({AccountService.class, TransferService.class}).
+       - givenBalance(...) saves a fresh source and target through
+         AccountRepository with unique 26-char numbers. Assertions re-read
+         through the repository after flush() + clear().
+       - The existing cases are kept: success, over limit, insufficient funds,
+         unknown source, accumulating limit.
+       - New cases:
+         - the target is credited
+         - an unknown target gives 404 and the source is unchanged
+     - repository/PersistenceTest:
+       - version goes up after an update
+       - a stale update (version bumped behind the entity's back via native SQL,
+         then flushed) throws OptimisticLockException
+     - controller/TransferControllerTest: the mocked service throws
+       ObjectOptimisticLockingFailureException, and the response is 409 with
+       code CONCURRENT_MODIFICATION.
+     - New TransferIntegrationTest: @SpringBootTest + MockMvc + @Transactional,
+       which works because MockMvc runs on the test thread, so each test rolls
+       back and the shared H2 stays clean.
+       - Through the real headers, POST 1→2 for 100: 201, and the balances
+         become 4900.00 / 1100.00.
+       - POST to target 99: 404, and account 1 is unchanged.
+     - model/AccountTest: add credit increases the balance.
+     - The @WebMvcTest controller tests keep mocking the services; the only
+       addition is the 409 case.
+
+     Verification
+
+     1. ./mvnw test: all green. contextLoads confirms that validate accepts the
+        new version column.
+     2. ./mvnw spring-boot:run, then:
+        - curl -X POST localhost:8080/api/v1/transfers -H "Authorization: Bearer
+          token-123" -H "X-Correlation-Id: t1" -H "Content-Type: 
+          application/json" -d '{"sourceId":1,"targetId":2,"amount":100}' → 201
+          with accBalance 4900.00
+        - GET /api/v1/accounts/1/limits → remaining 9900.00
+        - a transfer to targetId 99 → 404
+
+     "/plan open" to edit this plan in Notepad
+
+> I am not sure if service test should use @DataJpaTest@ shouldn't it use mocks 
+  of db?                                                                        
+
+● Your instinct is right. Mocks are the better fit for the service tests here.
+
+  ✶ Insight ─────────────────────────────────────
+  - What each service test needs to prove is plain Java. TransferService decides
+    which account to look up first, whether to throw a 404, and the order of
+    debit and credit. The limit and funds rules live in Account.debit, and
+    AccountTest already covers them. Mocking AccountRepository.findById(...) to
+    return hand-built Account objects tests all of that in milliseconds, with no
+    Spring context.
+  - What mocks can't prove is the JPA side. TransferService never calls save();
+    dirty checking writes the changes at commit. Rollback on an exception and
+    the @Version conflict also only happen against a real database. A mocked
+    test can't see any of that, and a @DataJpaTest service test only partly can,
+    because the test's own transaction stays open and is never committed.
+  - So the split is: Mockito unit tests for the services, and
+    TransferIntegrationTest (@SpringBootTest with real H2) for "the change was
+    actually saved." PersistenceTest keeps covering the schema, the seed data
+    and @Version.
+    ─────────────────────────────────────────────────
+
+  I'll update the plan that way.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~\.claude\plans\imperative-imagining-wirth.md · /plan to 
+     edit
+     Plan: Services work on H2 data via repositories (real transfers + 
+     optimistic locking)
+
+     Context
+
+     H2, the entities, AccountRepository and the seed data are in place, but
+     AccountService still holds a hardcoded Account and TransferService debits
+     it in memory. This change moves both services onto the database:
+     - Accounts are loaded through AccountRepository.
+     - A transfer is one @Transactional unit that debits the source and credits 
+       the target (the target must exist, or it's a 404).
+     - Concurrent transfers are guarded by optimistic locking (@Version on 
+       Account).
+
+     TransferHistory is not written yet (user's choice). The controllers keep
+     the same API.
+
+     Changes
+
+     1. Schema + entity: optimistic locking
+
+     - src/main/resources/schema.sql: add version BIGINT DEFAULT 0 NOT NULL to
+       account. The DEFAULT 0 lets data.sql stay unchanged.
+     - model/Account.java:
+       - add @Version private Long version;. Hibernate adds WHERE version = ? to
+         each UPDATE and bumps the value. If 0 rows match, it throws
+         OptimisticLockException, which Spring wraps as
+         ObjectOptimisticLockingFailureException.
+       - add public void credit(BigDecimal amount): balance = 
+         balance.add(amount). There's no limit check, because limits apply only
+         to outgoing money.
+
+     2. service/AccountService.java
+
+     - Remove the hardcoded account and the protected test constructor.
+     - Use @RequiredArgsConstructor with private final AccountRepository 
+       accountRepository.
+     - getAccount(id): accountRepository.findById(id).orElseThrow(() -> new 
+       AccountNotFoundException(id)).
+     - getLimits(id): unchanged signature, marked @Transactional(readOnly = 
+       true).
+
+     3. service/TransferService.java
+
+     @Transactional transfer(request):
+     1. Load the source (404 if it's missing), then the target (404 if it's
+        missing). The source goes first, so the existing "unknown source"
+        behaviour stays.
+     2. source.debit(amount): the limit and funds checks throw 422 before
+        anything changes.
+     3. target.credit(amount).
+     4. Return TransferResponse.from(request, source) (the response shape is
+        unchanged).
+
+     No explicit save() is needed: JPA dirty checking flushes both UPDATEs (each
+     carrying the version check) at commit. A runtime exception rolls the whole
+     transaction back.
+     → The ordering in this method body will be a TODO(human) Learn-by-Doing 
+     piece (which lookups and mutations happen, and in what order).
+
+     4. Error mapping for conflicts (CLAUDE.md error pattern)
+
+     - exception/ErrorCode.java: add
+       CONCURRENT_MODIFICATION(HttpStatus.CONFLICT).
+     - exception/GlobalExceptionHandler.java: add
+       @ExceptionHandler(OptimisticLockingFailureException.class) (the Spring
+       base type), which returns build(CONCURRENT_MODIFICATION, "Account was 
+       modified by another request, please retry").
+
+     The commit happens inside the @Transactional proxy, before control returns
+     to the controller, so this advice still catches the exception.
+
+     5. CLAUDE.md
+
+     Update the intro (state now lives in H2: schema.sql + data.sql, two seed
+     accounts) and the Transfers bullet (source debited, target credited, in one
+     transaction, with @Version → 409).
+
+     Tests
+
+     The split:
+     - Service tests are Mockito unit tests with no Spring context and no DB.
+       They cover the logic: lookups, the order of steps, and exceptions.
+     - Persistence, commit, rollback and the version check are covered by
+       TransferIntegrationTest (real H2) and PersistenceTest.
+     - A mocked repository can't prove those, because TransferService relies on
+       dirty checking rather than save().
+     - service/AccountServiceTest: @ExtendWith(MockitoExtension.class), with
+       @Mock AccountRepository and @InjectMocks AccountService.
+       - findById(1L) returns an account, so getAccount and getLimits return its
+         data.
+       - findById(99L) returns Optional.empty(), which gives
+         AccountNotFoundException.
+     - service/TransferServiceTest: Mockito, new TransferService(new 
+       AccountService(accountRepository)) with the repository mocked.
+       - givenAccounts(sourceBalance) stubs findById(1L) and findById(2L) to
+         return in-memory Accounts. The assertions check those objects' balances
+         and limits.
+       - The existing cases are kept: success, over limit, insufficient funds,
+         unknown source, accumulating limit.
+       - New cases:
+         - the target is credited by the amount
+         - an unknown target gives AccountNotFoundException, and the source is
+           not debited
+       - verify(accountRepository, never()).save(any()) documents that the
+         service relies on dirty checking.
+     - repository/PersistenceTest:
+       - version goes up after an update
+       - a stale update (version bumped behind the entity's back via native SQL,
+         then flushed) throws OptimisticLockException
+     - controller/TransferControllerTest: the mocked service throws
+       ObjectOptimisticLockingFailureException, and the response is 409 with
+       code CONCURRENT_MODIFICATION.
+     - New TransferIntegrationTest: @SpringBootTest + MockMvc + @Transactional,
+       which works because MockMvc runs on the test thread, so each test rolls
+       back and the shared H2 stays clean.
+       - Through the real headers, POST 1→2 for 100: 201, and the balances
+         become 4900.00 / 1100.00.
+       - POST to target 99: 404, and account 1 is unchanged.
+     - model/AccountTest: add credit increases the balance.
+     - The @WebMvcTest controller tests keep mocking the services; the only
+       addition is the 409 case.
+
+     Verification
+
+     1. ./mvnw test: all green. contextLoads confirms that validate accepts the
+        new version column.
+     2. ./mvnw spring-boot:run, then:
+        - curl -X POST localhost:8080/api/v1/transfers -H "Authorization: Bearer
+          token-123" -H "X-Correlation-Id: t1" -H "Content-Type: 
+          application/json" -d '{"sourceId":1,"targetId":2,"amount":100}' → 201
+          with accBalance 4900.00
+        - GET /api/v1/accounts/1/limits → remaining 9900.00
+        - a transfer to targetId 99 → 404

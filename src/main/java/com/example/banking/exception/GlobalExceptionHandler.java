@@ -5,6 +5,7 @@ import com.example.banking.dto.ErrorResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -49,6 +50,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<ErrorResponse> handleInsufficientFunds(InsufficientFundsException ex) {
         return build(ErrorCode.INSUFFICIENT_FUNDS, ex.getMessage());
+    }
+
+    /** @Version check failed on commit: another request changed the state of entity first. Safe to retry. */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(OptimisticLockingFailureException ex) {
+        log.warn("Optimistic lock conflict: {}", ex.getMessage());
+        return build(ErrorCode.CONCURRENT_MODIFICATION, "Account was modified by another request, please retry");
     }
 
     // ---- Required headers ---------------------------------------------------

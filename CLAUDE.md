@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Spring Boot 4.1 (Java 25, Lombok) sample banking REST API. There is no database: state is one hardcoded in-memory account (id 1) held by `AccountService`.
+Spring Boot 4.1 (Java 25, Lombok, Spring Data JPA) sample banking REST API. State lives in an in-memory H2 database, rebuilt on every start: `schema.sql` creates the tables (Hibernate only validates them, `ddl-auto=validate`) and `data.sql` seeds two test accounts (ids 1 and 2). Change the schema in `schema.sql` and the entity together, or startup fails.
 
 ## Commands
 
@@ -13,7 +13,7 @@ Spring Boot 4.1 (Java 25, Lombok) sample banking REST API. There is no database:
 ./mvnw spring-boot:run                    # start on port 8080
 ```
 
-`requests/transfer-curls.sh` changes the in-memory state, so run it against a freshly started app.
+Transfers change the H2 data until the app restarts, so run manual requests against a freshly started app.
 
 ## Architecture
 
@@ -24,4 +24,5 @@ Spring Boot 4.1 (Java 25, Lombok) sample banking REST API. There is no database:
 
   Requests Tomcat rejects before they reach the app (e.g. an encoded slash `%2F`) get Tomcat's default error page; that's an accepted gap.
 - **Money:** use `BigDecimal` with 2 decimal places via `MoneyUtils.normalize`. Compare with `compareTo`, because `equals` also compares scale.
-- **Transfers:** `TransferService` only debits the source account; the target account isn't touched or checked.
+- **Transfers:** `TransferService.transfer` is one `@Transactional` unit: it loads source then target (404 if either is missing), debits the source (422 on limit or funds) and credits the target. There's no `save()`: JPA dirty checking writes both on commit. `Account` has `@Version`, so a concurrent change fails the commit with `OptimisticLockingFailureException` → 409 `CONCURRENT_MODIFICATION`. `TransferHistory` exists but isn't written yet.
+- **Tests:** service tests are Mockito unit tests (mocked `AccountRepository`). Persistence, commit and rollback are covered by `PersistenceTest` (`@DataJpaTest`) and `TransferIntegrationTest` (`@SpringBootTest` + MockMvc + `@Transactional`, so each test rolls back).
