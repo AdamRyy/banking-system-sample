@@ -6,6 +6,7 @@ import com.example.banking.dto.TransferResponse;
 import com.example.banking.exception.AccountNotFoundException;
 import com.example.banking.exception.InsufficientFundsException;
 import com.example.banking.exception.TransferLimitExceededException;
+import com.example.banking.model.Account;
 import com.example.banking.service.TransferService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,6 +16,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -84,6 +86,15 @@ class TransferControllerTest {
 
         expectError(postJson(VALID_BODY).andExpect(status().isUnprocessableContent()), "INSUFFICIENT_FUNDS")
                 .andExpect(jsonPath("$.message").value(ex.getMessage()));
+    }
+
+    @Test
+    void returns409WhenAccountWasModifiedConcurrently() throws Exception {
+        when(transferService.transfer(any(TransferRequest.class)))
+                .thenThrow(new ObjectOptimisticLockingFailureException(Account.class, 1L));
+
+        expectError(postJson(VALID_BODY).andExpect(status().isConflict()), "CONCURRENT_MODIFICATION")
+                .andExpect(jsonPath("$.message").value("Account was modified by another request, please retry"));
     }
 
     @Test

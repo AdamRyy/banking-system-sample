@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class AccountTest {
 
     private static Account account(String balance) {
-        return new Account(1L, new BigDecimal(balance), new Limits());
+        return new Account(1L, "12345678901234567890123456", new BigDecimal(balance), new Limits());
     }
 
     private static void assertState(Account account, String balance, String used) {
@@ -22,12 +22,12 @@ class AccountTest {
     }
 
     @Test
-    void defaultAccountHasHardcodedValuesWithTwoDecimalPlaces() {
-        Account account = new Account();
+    void creditIncreasesBalanceAndLeavesLimitUntouched() {
+        Account account = account("1000");
 
-        assertEquals(1L, account.getId());
-        assertEquals(new BigDecimal("10000.00"), account.getLimits().getLimit());
-        assertState(account, "5000.00", "0.00");
+        account.credit(new BigDecimal("100.50"));
+
+        assertState(account, "1100.50", "0.00");
     }
 
     @Test

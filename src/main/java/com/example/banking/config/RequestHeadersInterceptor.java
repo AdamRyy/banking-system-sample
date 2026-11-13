@@ -51,7 +51,6 @@ public class RequestHeadersInterceptor implements HandlerInterceptor {
             throw new MissingCorrelationIdException();
         }
 
-
         return true;
     }
 
