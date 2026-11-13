@@ -1,6 +1,7 @@
 package com.example.banking.controller;
 
 import com.example.banking.model.Account;
+import com.example.banking.model.TransferDirection;
 import com.example.banking.model.TransferHistory;
 import com.example.banking.repository.AccountRepository;
 import com.example.banking.repository.TransferHistoryRepository;
@@ -15,6 +16,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 
 import static com.example.banking.controller.TestHeaders.withValidHeaders;
@@ -78,18 +80,60 @@ class TransferIntegrationTest {
         assertEquals(new BigDecimal("4900.00"), balanceOf(1));
         assertEquals(new BigDecimal("1100.00"), balanceOf(2));
 
-        List<TransferHistory> history = history();
-        assertEquals(1, history.size());
-        TransferHistory record = history.getFirst();
-        assertEquals(1L, record.getAccount().getId());
-        assertEquals("65432109876543210987654321", record.getCounterpartyAccountNumber());
-        assertEquals(new BigDecimal("100.00"), record.getAmount());
-        assertNotNull(record.getTimestamp());   // real system clock: only check it was set
+        List<TransferHistory> history = history().stream()
+                .sorted(Comparator.comparing(h -> h.getAccount().getId()))
+                .toList();
+        assertEquals(2, history.size());
+
+        TransferHistory outgoing = history.get(0);
+        assertEquals(1L, outgoing.getAccount().getId());
+        assertEquals(TransferDirection.OUTGOING, outgoing.getDirection());
+        assertEquals("65432109876543210987654321", outgoing.getCounterpartyAccountNumber());
+        assertEquals(new BigDecimal("100.00"), outgoing.getAmount());
+        assertNotNull(outgoing.getTimestamp());   // real system clock: only check it was set
+
+        TransferHistory incoming = history.get(1);
+        assertEquals(2L, incoming.getAccount().getId());
+        assertEquals(TransferDirection.INCOMING, incoming.getDirection());
+        assertEquals("12345678901234567890123456", incoming.getCounterpartyAccountNumber());
+        assertEquals(new BigDecimal("100.00"), incoming.getAmount());
+        assertEquals(outgoing.getTimestamp(), incoming.getTimestamp());
 
         mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/limits")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.used").value(100.00))
                 .andExpect(jsonPath("$.remaining").value(9900.00));
+    }
+
+    @Test
+    void allAccountsListShowsEachSideOfTheTransfer() throws Exception {
+        transfer(1, 2, "100").andExpect(status().isCreated());
+        entityManager.flush();
+        entityManager.clear();   // so GET really loads accounts and their transfers from H2
+
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].balance").value(4900.00))
+                .andExpect(jsonPath("$[0].transfers.length()").value(1))
+                .andExpect(jsonPath("$[0].transfers[0].direction").value("OUTGOING"))
+                .andExpect(jsonPath("$[0].transfers[0].counterpartyAccountNumber").value("65432109876543210987654321"))
+                .andExpect(jsonPath("$[0].transfers[0].amount").value(100.00))
+                .andExpect(jsonPath("$[1].id").value(2))
+                .andExpect(jsonPath("$[1].balance").value(1100.00))
+                .andExpect(jsonPath("$[1].transfers.length()").value(1))
+                .andExpect(jsonPath("$[1].transfers[0].direction").value("INCOMING"))
+                .andExpect(jsonPath("$[1].transfers[0].counterpartyAccountNumber").value("12345678901234567890123456"));
+    }
+
+    @Test
+    void allAccountsListShowsEmptyTransfersBeforeAnyTransfer() throws Exception {
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].transfers").isEmpty())
+                .andExpect(jsonPath("$[1].transfers").isEmpty());
     }
 
     @Test

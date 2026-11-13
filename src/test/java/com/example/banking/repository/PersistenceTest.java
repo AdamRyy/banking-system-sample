@@ -2,6 +2,7 @@ package com.example.banking.repository;
 
 import com.example.banking.model.Account;
 import com.example.banking.model.Limits;
+import com.example.banking.model.TransferDirection;
 import com.example.banking.model.TransferHistory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
@@ -54,7 +55,7 @@ class PersistenceTest {
         Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
         Instant now = Instant.parse("2026-11-12T10:15:30Z");
 
-        Long id = historyRepository.saveAndFlush(new TransferHistory(source, SECOND, new BigDecimal("100.5"), now)).getId();
+        Long id = historyRepository.saveAndFlush(new TransferHistory(source, SECOND, new BigDecimal("100.5"), now, TransferDirection.OUTGOING)).getId();
         entityManager.clear(); // force a real read from H2, not the persistence context
 
         TransferHistory loaded = historyRepository.findById(id).orElseThrow();
@@ -62,6 +63,23 @@ class PersistenceTest {
         assertEquals(SECOND, loaded.getCounterpartyAccountNumber());
         assertEquals(new BigDecimal("100.50"), loaded.getAmount());
         assertEquals(now, loaded.getTimestamp());
+        assertEquals(TransferDirection.OUTGOING, loaded.getDirection());
+    }
+
+    @Test
+    void accountTransfersAreLoadedLazilyFromHistory() {
+        Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
+        Instant now = Instant.parse("2026-11-12T10:15:30Z");
+        historyRepository.saveAndFlush(
+                new TransferHistory(source, SECOND, new BigDecimal("10"), now, TransferDirection.OUTGOING));
+        entityManager.clear();
+
+        Account reloaded = accountRepository.findByAccountNumber(FIRST).orElseThrow();
+        Account other = accountRepository.findByAccountNumber(SECOND).orElseThrow();
+
+        assertEquals(1, reloaded.getTransfers().size());
+        assertEquals(SECOND, reloaded.getTransfers().getFirst().getCounterpartyAccountNumber());
+        assertTrue(other.getTransfers().isEmpty());
     }
 
     @Test

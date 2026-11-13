@@ -9,6 +9,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +19,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Read access is public. State changes only through {@link #debit(BigDecimal)}, which keeps
@@ -53,6 +57,10 @@ public class Account {
     @Version
     private Long version;
 
+    /** Inverse side of {@link TransferHistory#getAccount()}; lazy ({@code @OneToMany} default), loaded on first access. */
+    @OneToMany(mappedBy = "account")
+    private List<TransferHistory> transfers = new ArrayList<>();
+
     public Account(Long id, String accountNumber, BigDecimal balance, Limits limits) {
         this.id = id;
         this.accountNumber = accountNumber;
@@ -69,6 +77,15 @@ public class Account {
         }
         balance = balance.subtract(amount);
         limits.use(amount);
+    }
+
+    public List<TransferHistory> getTransfers() {
+        return Collections.unmodifiableList(transfers);
+    }
+
+    /** Called only by the TransferHistory constructor. */
+    void addTransfer(TransferHistory transfer) {
+        transfers.add(transfer);
     }
 
     /** Incoming money: no limit applies, limits only cap outgoing transfers. */

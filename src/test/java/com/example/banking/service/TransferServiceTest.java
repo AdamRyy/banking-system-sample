@@ -7,6 +7,7 @@ import com.example.banking.exception.InsufficientFundsException;
 import com.example.banking.exception.TransferLimitExceededException;
 import com.example.banking.model.Account;
 import com.example.banking.model.Limits;
+import com.example.banking.model.TransferDirection;
 import com.example.banking.model.TransferHistory;
 import com.example.banking.repository.AccountRepository;
 import com.example.banking.repository.TransferHistoryRepository;
@@ -22,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -107,18 +109,34 @@ class TransferServiceTest {
     }
 
     @Test
-    void successfulTransferRecordsHistoryForSource() {
+    @SuppressWarnings("unchecked")
+    void successfulTransferRecordsOutgoingForSourceAndIncomingForTarget() {
         givenAccounts("5000");
 
         transferService.transfer(request("100.5"));
 
-        ArgumentCaptor<TransferHistory> captor = ArgumentCaptor.forClass(TransferHistory.class);
-        verify(transferHistoryRepository).save(captor.capture());   // exactly once
-        TransferHistory history = captor.getValue();
-        assertSame(source, history.getAccount());
-        assertEquals(target.getAccountNumber(), history.getCounterpartyAccountNumber());
-        assertEquals(new BigDecimal("100.50"), history.getAmount());
-        assertEquals(NOW, history.getTimestamp());
+        ArgumentCaptor<List<TransferHistory>> captor = ArgumentCaptor.forClass(List.class);
+        verify(transferHistoryRepository).saveAll(captor.capture());   // exactly once
+        List<TransferHistory> rows = captor.getValue();
+        assertEquals(2, rows.size());
+
+        TransferHistory outgoing = rows.get(0);
+        assertSame(source, outgoing.getAccount());
+        assertEquals(TransferDirection.OUTGOING, outgoing.getDirection());
+        assertEquals(target.getAccountNumber(), outgoing.getCounterpartyAccountNumber());
+        assertEquals(new BigDecimal("100.50"), outgoing.getAmount());
+        assertEquals(NOW, outgoing.getTimestamp());
+
+        TransferHistory incoming = rows.get(1);
+        assertSame(target, incoming.getAccount());
+        assertEquals(TransferDirection.INCOMING, incoming.getDirection());
+        assertEquals(source.getAccountNumber(), incoming.getCounterpartyAccountNumber());
+        assertEquals(new BigDecimal("100.50"), incoming.getAmount());
+        assertEquals(NOW, incoming.getTimestamp());
+
+        // The TransferHistory constructor keeps the inverse side (Account.transfers) in sync.
+        assertEquals(List.of(outgoing), source.getTransfers());
+        assertEquals(List.of(incoming), target.getTransfers());
     }
 
     @Test
@@ -179,6 +197,6 @@ class TransferServiceTest {
         assertThrows(TransferLimitExceededException.class, () -> transferService.transfer(request("5000")));
         assertSource("14000.00", "4000.00");
         assertEquals(new BigDecimal("7000.00"), target.getBalance());
-        verify(transferHistoryRepository, times(2)).save(any());   // the rejected third transfer adds none
+        verify(transferHistoryRepository, times(2)).saveAll(any());   // the rejected third transfer adds none
     }
 }

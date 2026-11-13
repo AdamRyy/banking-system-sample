@@ -3,6 +3,8 @@ package com.example.banking.model;
 import com.example.banking.util.MoneyUtils;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -19,7 +21,10 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/** One transfer made from {@link #account} to {@link #counterpartyAccountNumber}. */
+/**
+ * One side of a transfer, seen from {@link #account}: OUTGOING means money went to
+ * {@link #counterpartyAccountNumber}, INCOMING means it came from there. A transfer writes one row of each.
+ */
 @Entity
 @Table(name = "transfer_history")
 @Getter
@@ -47,10 +52,19 @@ public class TransferHistory {
     @Column(name = "executed_at", nullable = false)
     private Instant timestamp;
 
-    public TransferHistory(Account account, String counterpartyAccountNumber, BigDecimal amount, Instant timestamp) {
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(length = 8, nullable = false)
+    private TransferDirection direction;
+
+    /** Also adds the row to {@code account.getTransfers()}, so both sides of the relation stay in sync. */
+    public TransferHistory(Account account, String counterpartyAccountNumber, BigDecimal amount,
+                           Instant timestamp, TransferDirection direction) {
         this.account = account;
         this.counterpartyAccountNumber = counterpartyAccountNumber;
         this.amount = MoneyUtils.normalize(amount);
         this.timestamp = timestamp;
+        this.direction = direction;
+        account.addTransfer(this);
     }
 }

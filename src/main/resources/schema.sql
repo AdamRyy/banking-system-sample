@@ -15,6 +15,9 @@ CREATE TABLE transfer_history (
     counterparty_account_number VARCHAR(26)              NOT NULL,
     amount                      DECIMAL(17, 2)           NOT NULL,
     executed_at                 TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+    -- Native H2 ENUM instead of VARCHAR + CHECK (direction IN (...)): on H2 2.4 a CHECK comparing strings
+    -- fails with error 23514 ("database closed") once the connection that ran this script is closed.
+    direction                   ENUM('INCOMING', 'OUTGOING') NOT NULL,
     CONSTRAINT fk_transfer_history_account FOREIGN KEY (account_id) REFERENCES account (id),
     CONSTRAINT ck_counterparty_length CHECK (CHAR_LENGTH(counterparty_account_number) = 26),
     CONSTRAINT ck_amount_positive CHECK (amount > 0)

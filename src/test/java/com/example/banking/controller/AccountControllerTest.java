@@ -1,8 +1,11 @@
 package com.example.banking.controller;
 
 import com.example.banking.config.WebConfig;
+import com.example.banking.dto.AccountResponse;
+import com.example.banking.dto.TransferHistoryResponse;
 import com.example.banking.exception.AccountNotFoundException;
 import com.example.banking.model.Limits;
+import com.example.banking.model.TransferDirection;
 import com.example.banking.service.AccountService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,12 +13,19 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+
 import static com.example.banking.controller.TestHeaders.CORRELATION_ID;
+import static com.example.banking.controller.TestHeaders.CORRELATION_ID_HEADER;
+import static com.example.banking.controller.TestHeaders.VALID_AUTHORIZATION;
 import static com.example.banking.controller.TestHeaders.withValidHeaders;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -95,6 +105,70 @@ class AccountControllerTest {
         expectError(mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/limits")).accept(MediaType.APPLICATION_XML))
                 .andExpect(status().isNotAcceptable())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON)), "NOT_ACCEPTABLE");
+    }
+
+    @Test
+    void returnsAllAccountsWithTheirTransfers() throws Exception {
+        TransferHistoryResponse outgoing = new TransferHistoryResponse(10L, TransferDirection.OUTGOING,
+                "65432109876543210987654321", new BigDecimal("100.00"), Instant.parse("2026-11-12T10:15:30Z"));
+        TransferHistoryResponse incoming = new TransferHistoryResponse(11L, TransferDirection.INCOMING,
+                "12345678901234567890123456", new BigDecimal("100.00"), Instant.parse("2026-11-12T10:15:30Z"));
+        when(accountService.getAllAccounts()).thenReturn(List.of(
+                new AccountResponse(1L, "12345678901234567890123456", new BigDecimal("4900.00"), List.of(outgoing)),
+                new AccountResponse(2L, "65432109876543210987654321", new BigDecimal("1100.00"), List.of(incoming))));
+
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].accountNumber").value("12345678901234567890123456"))
+                .andExpect(jsonPath("$[0].balance").value(4900.00))
+                .andExpect(jsonPath("$[0].transfers[0].id").value(10))
+                .andExpect(jsonPath("$[0].transfers[0].direction").value("OUTGOING"))
+                .andExpect(jsonPath("$[0].transfers[0].counterpartyAccountNumber").value("65432109876543210987654321"))
+                .andExpect(jsonPath("$[0].transfers[0].amount").value(100.00))
+                .andExpect(jsonPath("$[0].transfers[0].timestamp").value("2026-11-12T10:15:30Z"))
+                .andExpect(jsonPath("$[1].transfers[0].direction").value("INCOMING"));
+    }
+
+    @Test
+    void returnsEmptyArrayWhenThereAreNoAccounts() throws Exception {
+        when(accountService.getAllAccounts()).thenReturn(List.of());
+
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void returnsEmptyTransfersForAccountWithoutHistory() throws Exception {
+        when(accountService.getAllAccounts()).thenReturn(List.of(
+                new AccountResponse(1L, "12345678901234567890123456", new BigDecimal("5000.00"), List.of())));
+
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].transfers").isArray())
+                .andExpect(jsonPath("$[0].transfers").isEmpty());
+    }
+
+    @Test
+    void allAccountsRequiresAuthorization() throws Exception {
+        mockMvc.perform(get("/api/v1/accounts").header(CORRELATION_ID_HEADER, CORRELATION_ID))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        verify(accountService, never()).getAllAccounts();
+    }
+
+    @Test
+    void allAccountsRequiresCorrelationId() throws Exception {
+        mockMvc.perform(get("/api/v1/accounts").header(HttpHeaders.AUTHORIZATION, VALID_AUTHORIZATION))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MISSING_CORRELATION_ID"));
+
+        verify(accountService, never()).getAllAccounts();
     }
 
     @Test

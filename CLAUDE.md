@@ -15,6 +15,10 @@ Spring Boot 4.1 (Java 25, Lombok, Spring Data JPA) sample banking REST API. Stat
 
 Transfers change the H2 data until the app restarts, so run manual requests against a freshly started app.
 
+## Conventions
+
+- **Comments:** keep Javadoc and comments short, and add them only where the code is complicated or misleading (e.g. a hidden lazy load, no `save()` because of dirty checking). Don't comment code that already explains itself.
+
 ## Architecture
 
 - **Required headers:** `RequestHeadersInterceptor` rejects requests without `Authorization: Bearer <app.security.token>` (401) or `X-Correlation-Id` (400). `WebConfig` builds and registers it, so `@WebMvcTest` classes need `@Import(WebConfig.class)`, and test requests need `TestHeaders.withValidHeaders(...)`.
