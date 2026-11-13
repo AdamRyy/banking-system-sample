@@ -29,19 +29,18 @@ public class AccountService {
         return getAccount(accountId).getLimits();
     }
 
-    /**
-     * Naive on purpose (no JOIN FETCH / @EntityGraph): 1 select for the accounts, then 1 select per
-     * account when its lazy transfers are first read. The mapping must stay inside this transaction:
-     * open-in-view is off, so touching getTransfers() after it ends throws LazyInitializationException.
-     */
+    /** One select: the entity graph fetches every account's transfers in the same query (no N+1). */
     @Transactional(readOnly = true)
     public List<AccountResponse> getAllAccounts() {
-        return accountRepository.findAll().stream()
+        return accountRepository.findAllWithTransfers().stream()
                 .map(this::toResponse)
                 .toList();
     }
 
-    /** Reads the lazy transfers (1 select), so it must run inside the caller's transaction. */
+    /**
+     * Reads the lazy transfers: free after findAllWithTransfers(), otherwise 1 hidden select per account.
+     * Must run inside a transaction (open-in-view is off), or getTransfers() throws LazyInitializationException.
+     */
     private AccountResponse toResponse(Account account) {
         List<TransferHistoryResponse> transfers = account.getTransfers().stream()
                 .map(TransferHistoryResponse::from)

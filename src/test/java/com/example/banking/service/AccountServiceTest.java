@@ -67,7 +67,7 @@ class AccountServiceTest {
         Instant now = Instant.parse("2026-11-12T10:15:30Z");
         new TransferHistory(account, other.getAccountNumber(), new BigDecimal("100"), now, TransferDirection.OUTGOING);
         new TransferHistory(other, account.getAccountNumber(), new BigDecimal("100"), now, TransferDirection.INCOMING);
-        when(accountRepository.findAll()).thenReturn(List.of(account, other));
+        when(accountRepository.findAllWithTransfers()).thenReturn(List.of(account, other));
 
         List<AccountResponse> result = accountService.getAllAccounts();
 
@@ -89,14 +89,14 @@ class AccountServiceTest {
 
     @Test
     void getAllAccountsReturnsEmptyListWhenThereAreNoAccounts() {
-        when(accountRepository.findAll()).thenReturn(List.of());
+        when(accountRepository.findAllWithTransfers()).thenReturn(List.of());
 
         assertTrue(accountService.getAllAccounts().isEmpty());
     }
 
     @Test
     void getAllAccountsReturnsEmptyTransfersForAccountWithoutHistory() {
-        when(accountRepository.findAll()).thenReturn(List.of(account));
+        when(accountRepository.findAllWithTransfers()).thenReturn(List.of(account));
 
         List<AccountResponse> result = accountService.getAllAccounts();
 

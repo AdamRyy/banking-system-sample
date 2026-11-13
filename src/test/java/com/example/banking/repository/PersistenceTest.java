@@ -7,6 +7,8 @@ import com.example.banking.model.TransferHistory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
 import jakarta.validation.ConstraintViolationException;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -80,6 +82,35 @@ class PersistenceTest {
         assertEquals(1, reloaded.getTransfers().size());
         assertEquals(SECOND, reloaded.getTransfers().getFirst().getCounterpartyAccountNumber());
         assertTrue(other.getTransfers().isEmpty());
+    }
+
+    @Test
+    void findAllWithTransfersFetchesTransfersInTheSameQuery() {
+        Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
+        Instant earlier = Instant.parse("2026-11-12T10:15:30Z");
+        Instant later = earlier.plusSeconds(60);
+        // Two rows on one account (so a duplicating join would show), saved newest first to test @OrderBy.
+        historyRepository.saveAll(List.of(
+                new TransferHistory(source, SECOND, new BigDecimal("20"), later, TransferDirection.OUTGOING),
+                new TransferHistory(source, SECOND, new BigDecimal("10"), earlier, TransferDirection.OUTGOING)));
+        historyRepository.flush();
+        long accountCount = accountRepository.count();
+        entityManager.clear();
+        Statistics stats = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.clear();
+
+        List<Account> accounts = accountRepository.findAllWithTransfers();
+        // Touch every collection, so a lazy or batch load would run (and be counted) here.
+        accounts.forEach(account -> account.getTransfers().size());
+
+        assertEquals(1, stats.getPrepareStatementCount());
+        assertEquals(accountCount, accounts.size()); // the LEFT JOIN must not duplicate accounts
+        assertEquals(accounts.stream().map(Account::getId).sorted().toList(),
+                accounts.stream().map(Account::getId).toList());
+        List<TransferHistory> transfers = accounts.stream()
+                .filter(a -> a.getAccountNumber().equals(FIRST)).findFirst().orElseThrow()
+                .getTransfers();
+        assertEquals(List.of(earlier, later), transfers.stream().map(TransferHistory::getTimestamp).toList());
     }
 
     @Test

@@ -10,6 +10,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotNull;
@@ -59,6 +60,7 @@ public class Account {
 
     /** Inverse side of {@link TransferHistory#getAccount()}; lazy ({@code @OneToMany} default), loaded on first access. */
     @OneToMany(mappedBy = "account")
+    @OrderBy("timestamp ASC, id ASC") // oldest first; id breaks ties between rows of the same instant
     private List<TransferHistory> transfers = new ArrayList<>();
 
     public Account(Long id, String accountNumber, BigDecimal balance, Limits limits) {
