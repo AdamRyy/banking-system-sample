@@ -1,6 +1,7 @@
 -- Test accounts loaded on every start. No explicit ids: the identity column assigns 1 and 2,
 -- so later JPA inserts don't collide with them.
-INSERT INTO account (account_number, balance, transfer_limit, limit_used)
-VALUES ('12345678901234567890123456', 5000.00, 10000.00, 0.00);
-INSERT INTO account (account_number, balance, transfer_limit, limit_used)
-VALUES ('65432109876543210987654321', 1000.00, 10000.00, 0.00);
+-- daily_limit_reset_at is in the past, so the first transfer starts today's limit window.
+INSERT INTO accounts (account_number, balance, daily_limit_transfer, daily_limit_used, daily_limit_reset_at)
+VALUES ('12345678901234567890123456', 5000.00, 10000.00, 0.00, TIMESTAMP WITH TIME ZONE '2026-11-11 00:00:00+00');
+INSERT INTO accounts (account_number, balance, daily_limit_transfer, daily_limit_used, daily_limit_reset_at)
+VALUES ('65432109876543210987654321', 1000.00, 10000.00, 0.00, TIMESTAMP WITH TIME ZONE '2026-11-11 00:00:00+00');

@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -120,7 +121,7 @@ class TransferServiceTest {
         List<TransferHistory> rows = captor.getValue();
         assertEquals(2, rows.size());
 
-        TransferHistory outgoing = rows.get(0);
+        TransferHistory outgoing = rows.getFirst();
         assertSame(source, outgoing.getAccount());
         assertEquals(TransferDirection.OUTGOING, outgoing.getDirection());
         assertEquals(target.getAccountNumber(), outgoing.getCounterpartyAccountNumber());
@@ -198,5 +199,19 @@ class TransferServiceTest {
         assertSource("14000.00", "4000.00");
         assertEquals(new BigDecimal("7000.00"), target.getBalance());
         verify(transferHistoryRepository, times(2)).saveAll(any());   // the rejected third transfer adds none
+    }
+
+    @Test
+    void limitUsedYesterdayIsAvailableAgainToday() {
+        givenAccounts("20000");
+        TransferService yesterday = new TransferService(new AccountService(accountRepository),
+                transferHistoryRepository, Clock.fixed(NOW.minus(1, ChronoUnit.DAYS), ZoneOffset.UTC));
+        yesterday.transfer(request("9000"));
+        assertSource("11000.00", "1000.00");
+
+        TransferResponse response = transferService.transfer(request("5000"));
+
+        assertEquals(new BigDecimal("5000.00"), response.remainingLimit());
+        assertSource("6000.00", "5000.00");
     }
 }

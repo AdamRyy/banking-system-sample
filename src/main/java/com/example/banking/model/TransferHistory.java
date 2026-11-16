@@ -13,10 +13,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -45,6 +48,8 @@ public class TransferHistory {
     private String counterpartyAccountNumber;
 
     // 17 = 15 integer digits + 2 decimals, same as TransferRequest's @Digits.
+    @NotNull
+    @Positive
     @Column(precision = 17, scale = MoneyUtils.SCALE, nullable = false)
     private BigDecimal amount;
 
@@ -54,17 +59,17 @@ public class TransferHistory {
 
     @NotNull
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR) // H2Dialect would otherwise expect a native ENUM column
     @Column(length = 8, nullable = false)
     private TransferDirection direction;
 
-    /** Also adds the row to {@code account.getTransfers()}, so both sides of the relation stay in sync. */
-    public TransferHistory(Account account, String counterpartyAccountNumber, BigDecimal amount,
-                           Instant timestamp, TransferDirection direction) {
+    /** Use {@link Account#recordTransfer}, which also adds the row to the account's list. */
+    TransferHistory(Account account, String counterpartyAccountNumber, BigDecimal amount,
+                    Instant timestamp, TransferDirection direction) {
         this.account = account;
         this.counterpartyAccountNumber = counterpartyAccountNumber;
         this.amount = MoneyUtils.normalize(amount);
         this.timestamp = timestamp;
         this.direction = direction;
-        account.addTransfer(this);
     }
 }

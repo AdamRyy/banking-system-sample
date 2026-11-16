@@ -38,7 +38,6 @@ public class AccountService {
     }
 
     /**
-     * Reads the lazy transfers: free after findAllWithTransfers(), otherwise 1 hidden select per account.
      * Must run inside a transaction (open-in-view is off), or getTransfers() throws LazyInitializationException.
      */
     private AccountResponse toResponse(Account account) {

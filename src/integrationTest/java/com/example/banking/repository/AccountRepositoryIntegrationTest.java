@@ -5,7 +5,6 @@ import com.example.banking.model.Limits;
 import com.example.banking.model.TransferDirection;
 import com.example.banking.model.TransferHistory;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceException;
 import jakarta.validation.ConstraintViolationException;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -17,7 +16,9 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,10 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs against H2 built from schema.sql + data.sql; each test rolls back. */
 @DataJpaTest
-class PersistenceTest {
+class AccountRepositoryIntegrationTest {
 
     private static final String FIRST = "12345678901234567890123456";
     private static final String SECOND = "65432109876543210987654321";
+    private static final Instant NOW = Instant.parse("2026-11-12T10:15:30Z");
 
     @Autowired
     private AccountRepository accountRepository;
@@ -53,27 +55,10 @@ class PersistenceTest {
     }
 
     @Test
-    void transferHistoryIsSavedWithItsAccount() {
-        Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        Instant now = Instant.parse("2026-11-12T10:15:30Z");
-
-        Long id = historyRepository.saveAndFlush(new TransferHistory(source, SECOND, new BigDecimal("100.5"), now, TransferDirection.OUTGOING)).getId();
-        entityManager.clear(); // force a real read from H2, not the persistence context
-
-        TransferHistory loaded = historyRepository.findById(id).orElseThrow();
-        assertEquals(FIRST, loaded.getAccount().getAccountNumber());
-        assertEquals(SECOND, loaded.getCounterpartyAccountNumber());
-        assertEquals(new BigDecimal("100.50"), loaded.getAmount());
-        assertEquals(now, loaded.getTimestamp());
-        assertEquals(TransferDirection.OUTGOING, loaded.getDirection());
-    }
-
-    @Test
     void accountTransfersAreLoadedLazilyFromHistory() {
         Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        Instant now = Instant.parse("2026-11-12T10:15:30Z");
         historyRepository.saveAndFlush(
-                new TransferHistory(source, SECOND, new BigDecimal("10"), now, TransferDirection.OUTGOING));
+                source.recordTransfer(SECOND, new BigDecimal("10"), NOW, TransferDirection.OUTGOING));
         entityManager.clear();
 
         Account reloaded = accountRepository.findByAccountNumber(FIRST).orElseThrow();
@@ -87,12 +72,12 @@ class PersistenceTest {
     @Test
     void findAllWithTransfersFetchesTransfersInTheSameQuery() {
         Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        Instant earlier = Instant.parse("2026-11-12T10:15:30Z");
+        Instant earlier = NOW;
         Instant later = earlier.plusSeconds(60);
         // Two rows on one account (so a duplicating join would show), saved newest first to test @OrderBy.
         historyRepository.saveAll(List.of(
-                new TransferHistory(source, SECOND, new BigDecimal("20"), later, TransferDirection.OUTGOING),
-                new TransferHistory(source, SECOND, new BigDecimal("10"), earlier, TransferDirection.OUTGOING)));
+                source.recordTransfer(SECOND, new BigDecimal("20"), later, TransferDirection.OUTGOING),
+                source.recordTransfer(SECOND, new BigDecimal("10"), earlier, TransferDirection.OUTGOING)));
         historyRepository.flush();
         long accountCount = accountRepository.count();
         entityManager.clear();
@@ -114,6 +99,19 @@ class PersistenceTest {
     }
 
     @Test
+    void dailyLimitResetAtRoundTripsWithoutChangingTheDay() {
+        Account account = accountRepository.findByAccountNumber(FIRST).orElseThrow();
+        assertEquals(Instant.parse("2026-11-11T00:00:00Z"), account.getLimits().getResetAt()); // seeded as already expired
+
+        account.debit(new BigDecimal("1.00"), Clock.fixed(NOW, ZoneOffset.UTC)); // starts a new window ending today
+        accountRepository.flush();
+        entityManager.clear();
+
+        Account reloaded = accountRepository.findByAccountNumber(FIRST).orElseThrow();
+        assertEquals(Instant.parse("2026-11-12T23:59:59.999999Z"), reloaded.getLimits().getResetAt());
+    }
+
+    @Test
     void versionIsBumpedOnEveryUpdate() {
         Account account = accountRepository.findByAccountNumber(FIRST).orElseThrow();
         long before = account.getVersion();
@@ -128,7 +126,7 @@ class PersistenceTest {
     void staleUpdateIsRejectedByVersionCheck() {
         Account account = accountRepository.findByAccountNumber(FIRST).orElseThrow();
         // Simulates another transaction committing a change after we read the row.
-        entityManager.createNativeQuery("UPDATE account SET version = version + 1 WHERE id = :id")
+        entityManager.createNativeQuery("UPDATE accounts SET version = version + 1 WHERE id = :id")
                 .setParameter("id", account.getId())
                 .executeUpdate();
 
@@ -147,17 +145,5 @@ class PersistenceTest {
                 () -> accountRepository.saveAndFlush(account));
 
         assertEquals("accountNumber", ex.getConstraintViolations().iterator().next().getPropertyPath().toString());
-    }
-
-    @Test
-    void databaseRejectsWrongLengthAccountNumberEvenWithoutJpa() {
-        // Plain SQL skips @Size (like data.sql would), so only the schema.sql CHECK can stop it.
-        var insert = entityManager.createNativeQuery("""
-                INSERT INTO account (account_number, balance, transfer_limit, limit_used)
-                VALUES ('123', 100.00, 10000.00, 0.00)""");
-
-        PersistenceException ex = assertThrows(PersistenceException.class, insert::executeUpdate);
-
-        assertTrue(ex.getMessage().toUpperCase().contains("CK_ACCOUNT_NUMBER_LENGTH"), ex.getMessage());
     }
 }

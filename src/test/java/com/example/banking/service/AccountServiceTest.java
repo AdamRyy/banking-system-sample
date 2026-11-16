@@ -6,7 +6,6 @@ import com.example.banking.exception.AccountNotFoundException;
 import com.example.banking.model.Account;
 import com.example.banking.model.Limits;
 import com.example.banking.model.TransferDirection;
-import com.example.banking.model.TransferHistory;
 import com.example.banking.repository.AccountRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,14 +64,14 @@ class AccountServiceTest {
     void getAllAccountsMapsAccountsWithTheirTransfers() {
         Account other = new Account(2L, "65432109876543210987654321", new BigDecimal("1000.00"), new Limits());
         Instant now = Instant.parse("2026-11-12T10:15:30Z");
-        new TransferHistory(account, other.getAccountNumber(), new BigDecimal("100"), now, TransferDirection.OUTGOING);
-        new TransferHistory(other, account.getAccountNumber(), new BigDecimal("100"), now, TransferDirection.INCOMING);
+        account.recordTransfer(other.getAccountNumber(), new BigDecimal("100"), now, TransferDirection.OUTGOING);
+        other.recordTransfer(account.getAccountNumber(), new BigDecimal("100"), now, TransferDirection.INCOMING);
         when(accountRepository.findAllWithTransfers()).thenReturn(List.of(account, other));
 
         List<AccountResponse> result = accountService.getAllAccounts();
 
         assertEquals(2, result.size());
-        AccountResponse first = result.get(0);
+        AccountResponse first = result.getFirst();
         assertEquals(1L, first.id());
         assertEquals("12345678901234567890123456", first.accountNumber());
         assertEquals(new BigDecimal("5000.00"), first.balance());

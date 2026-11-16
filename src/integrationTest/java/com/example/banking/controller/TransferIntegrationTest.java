@@ -85,7 +85,7 @@ class TransferIntegrationTest {
                 .toList();
         assertEquals(2, history.size());
 
-        TransferHistory outgoing = history.get(0);
+        TransferHistory outgoing = history.getFirst();
         assertEquals(1L, outgoing.getAccount().getId());
         assertEquals(TransferDirection.OUTGOING, outgoing.getDirection());
         assertEquals("65432109876543210987654321", outgoing.getCounterpartyAccountNumber());

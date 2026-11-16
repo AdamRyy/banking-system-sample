@@ -25,6 +25,8 @@ public class AccountController {
         return accountService.getAllAccounts();
     }
 
+    // TODO: the daily limit resets only on a transfer, so after midnight this can show yesterday's "used"
+    //  until the next transfer. Fix: compute the effective used/remaining on read via Account methods.
     @GetMapping("/{accountId}/limits")
     public LimitsResponse getLimits(@PathVariable @NotNull @Positive Long accountId) {
         return LimitsResponse.from(accountService.getLimits(accountId));

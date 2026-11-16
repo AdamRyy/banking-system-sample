@@ -20,16 +20,18 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Read access is public. State changes only through {@link #debit(BigDecimal)}, which keeps
- * the balance and the used limit consistent.
+ * Read access is public. State changes only through {@link #debit(BigDecimal, Clock)}, which keeps
+ * the balance and the used limit consistent, and {@link #credit(BigDecimal)}.
  */
 @Entity
-@Table(name = "account")
+@Table(name = "accounts")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED) // for JPA only
 public class Account {
@@ -70,7 +72,8 @@ public class Account {
         this.limits = limits;
     }
 
-    public void debit(BigDecimal amount) {
+    public void debit(BigDecimal amount, Clock clock) {
+        limits.resetIfExpired(clock);
         if (!limits.allow(amount)) {
             throw new TransferLimitExceededException(id, amount, limits.getRemaining());
         }
@@ -85,9 +88,12 @@ public class Account {
         return Collections.unmodifiableList(transfers);
     }
 
-    /** Called only by the TransferHistory constructor. */
-    void addTransfer(TransferHistory transfer) {
+    /** The only way to create a TransferHistory, so both sides of the relation stay in sync. Doesn't load the lazy list. */
+    public TransferHistory recordTransfer(String counterpartyAccountNumber, BigDecimal amount, Instant timestamp,
+                                          TransferDirection direction) {
+        TransferHistory transfer = new TransferHistory(this, counterpartyAccountNumber, amount, timestamp, direction);
         transfers.add(transfer);
+        return transfer;
     }
 
     /** Incoming money: no limit applies, limits only cap outgoing transfers. */

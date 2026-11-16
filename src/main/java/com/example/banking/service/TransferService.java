@@ -4,7 +4,6 @@ import com.example.banking.dto.TransferRequest;
 import com.example.banking.dto.TransferResponse;
 import com.example.banking.model.Account;
 import com.example.banking.model.TransferDirection;
-import com.example.banking.model.TransferHistory;
 import com.example.banking.repository.TransferHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,14 +30,14 @@ public class TransferService {
     public TransferResponse transfer(TransferRequest request) {
         Account source = accountService.getAccount(request.sourceId()); // 404 if unknown
         Account target = accountService.getAccount(request.targetId()); // 404 if unknown
-        source.debit(request.amount());                                 // 422 if limit or funds are short
+        source.debit(request.amount(), clock);                                 // 422 if limit or funds are short
         target.credit(request.amount());
 
         // One history row per side, so each account sees the transfer in its own history.
         Instant now = clock.instant();
         transferHistoryRepository.saveAll(List.of(
-                new TransferHistory(source, target.getAccountNumber(), request.amount(), now, TransferDirection.OUTGOING),
-                new TransferHistory(target, source.getAccountNumber(), request.amount(), now, TransferDirection.INCOMING)));
+                source.recordTransfer(target.getAccountNumber(), request.amount(), now, TransferDirection.OUTGOING),
+                target.recordTransfer(source.getAccountNumber(), request.amount(), now, TransferDirection.INCOMING)));
         return TransferResponse.from(request, source);
     }
 }
