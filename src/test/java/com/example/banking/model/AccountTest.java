@@ -5,14 +5,19 @@ import com.example.banking.exception.TransferLimitExceededException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AccountTest {
 
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-12T10:15:30Z"), ZoneOffset.UTC);
+
     private static Account account(String balance) {
-        return new Account(1L, new BigDecimal(balance), new Limits());
+        return new Account(1L, "12345678901234567890123456", new BigDecimal(balance), new Limits());
     }
 
     private static void assertState(Account account, String balance, String used) {
@@ -22,12 +27,12 @@ class AccountTest {
     }
 
     @Test
-    void defaultAccountHasHardcodedValuesWithTwoDecimalPlaces() {
-        Account account = new Account();
+    void creditIncreasesBalanceAndLeavesLimitUntouched() {
+        Account account = account("1000");
 
-        assertEquals(1L, account.getId());
-        assertEquals(new BigDecimal("10000.00"), account.getLimits().getLimit());
-        assertState(account, "5000.00", "0.00");
+        account.credit(new BigDecimal("100.50"));
+
+        assertState(account, "1100.50", "0.00");
     }
 
     @Test
@@ -39,7 +44,7 @@ class AccountTest {
     void debitReducesBalanceAndUsesLimit() {
         Account account = account("5000");
 
-        account.debit(new BigDecimal("100.5"));
+        account.debit(new BigDecimal("100.5"), CLOCK);
 
         assertState(account, "4899.50", "100.50");
     }
@@ -48,7 +53,7 @@ class AccountTest {
     void debitAllowsExactBalance() {
         Account account = account("5000");
 
-        account.debit(new BigDecimal("5000"));
+        account.debit(new BigDecimal("5000"), CLOCK);
 
         assertState(account, "0.00", "5000.00");
     }
@@ -58,7 +63,7 @@ class AccountTest {
         Account account = account("500");
 
         InsufficientFundsException ex = assertThrows(InsufficientFundsException.class,
-                () -> account.debit(new BigDecimal("500.01")));
+                () -> account.debit(new BigDecimal("500.01"), CLOCK));
 
         assertEquals("Account 1 has insufficient funds: requested 500.01, available 500.00", ex.getMessage());
         assertState(account, "500.00", "0.00");
@@ -69,7 +74,7 @@ class AccountTest {
         Account account = account("20000");
 
         TransferLimitExceededException ex = assertThrows(TransferLimitExceededException.class,
-                () -> account.debit(new BigDecimal("10000.01")));
+                () -> account.debit(new BigDecimal("10000.01"), CLOCK));
 
         assertEquals("Account 1 transfer limit exceeded: requested 10000.01, remaining limit 10000.00", ex.getMessage());
         assertState(account, "20000.00", "0.00");
@@ -80,6 +85,6 @@ class AccountTest {
         // Both rules are broken: the limit violation wins.
         Account account = account("500");
 
-        assertThrows(TransferLimitExceededException.class, () -> account.debit(new BigDecimal("10000.01")));
+        assertThrows(TransferLimitExceededException.class, () -> account.debit(new BigDecimal("10000.01"), CLOCK));
     }
 }

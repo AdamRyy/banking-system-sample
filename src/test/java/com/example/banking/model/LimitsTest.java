@@ -3,12 +3,22 @@ package com.example.banking.model;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LimitsTest {
+
+    private static final Instant NOW = Instant.parse("2026-11-12T10:15:30Z");
+    private static final Instant END_OF_DAY = Instant.parse("2026-11-12T23:59:59.999999Z");
+
+    private static Clock clockAt(Instant instant) {
+        return Clock.fixed(instant, ZoneOffset.UTC);
+    }
 
     @Test
     void newLimitsHaveNothingUsed() {
@@ -51,5 +61,40 @@ class LimitsTest {
         limits.use(new BigDecimal("9500.00"));
         assertTrue(limits.allow(new BigDecimal("500.00")));
         assertFalse(limits.allow(new BigDecimal("500.01")));
+    }
+
+    @Test
+    void expiredWindowResetsUsedAndMovesResetAtToEndOfToday() {
+        Limits limits = new Limits(); // resetAt = EPOCH, already expired
+        limits.use(new BigDecimal("4000.00"));
+
+        limits.resetIfExpired(clockAt(NOW));
+
+        assertEquals(new BigDecimal("0.00"), limits.getUsed());
+        assertEquals(END_OF_DAY, limits.getResetAt());
+    }
+
+    @Test
+    void openWindowKeepsUsed() {
+        Limits limits = new Limits();
+        limits.resetIfExpired(clockAt(NOW));
+        limits.use(new BigDecimal("4000.00"));
+
+        limits.resetIfExpired(clockAt(END_OF_DAY)); // last instant of the window still counts
+
+        assertEquals(new BigDecimal("4000.00"), limits.getUsed());
+        assertEquals(END_OF_DAY, limits.getResetAt());
+    }
+
+    @Test
+    void firstInstantOfNextDayResets() {
+        Limits limits = new Limits();
+        limits.resetIfExpired(clockAt(NOW));
+        limits.use(new BigDecimal("4000.00"));
+
+        limits.resetIfExpired(clockAt(Instant.parse("2026-11-13T00:00:00Z")));
+
+        assertEquals(new BigDecimal("0.00"), limits.getUsed());
+        assertEquals(Instant.parse("2026-11-13T23:59:59.999999Z"), limits.getResetAt());
     }
 }
