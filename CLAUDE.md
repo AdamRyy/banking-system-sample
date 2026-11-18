@@ -34,3 +34,4 @@ Architecture decisions live in `docs/adr`, one ADR per decision (index: `docs/ad
 @docs/adr/0003-money-as-bigdecimal.md
 @docs/adr/0004-transfers-transaction-and-optimistic-locking.md
 @docs/adr/0006-separate-integration-test-source-set.md
+@docs/adr/0007-paginated-list-endpoints.md

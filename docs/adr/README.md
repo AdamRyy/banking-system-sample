@@ -8,6 +8,7 @@
 | [0004](0004-transfers-transaction-and-optimistic-locking.md) | Transfers: one transaction with optimistic locking |
 | [0005](0005-test-strategy.md) | Test strategy |
 | [0006](0006-separate-integration-test-source-set.md) | Separate source set for integration tests |
+| [0007](0007-paginated-list-endpoints.md) | Paginated list endpoints |
 
 To add one, copy the format into `NNNN-short-title.md` using the next number, add it here, and import it
 in `CLAUDE.md`. Don't rewrite an accepted ADR to change a decision: add a new ADR, set the old one's

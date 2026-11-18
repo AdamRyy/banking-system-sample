@@ -2,12 +2,8 @@ package com.example.banking.repository;
 
 import com.example.banking.model.Account;
 import com.example.banking.model.Limits;
-import com.example.banking.model.TransferDirection;
-import com.example.banking.model.TransferHistory;
 import jakarta.persistence.EntityManager;
 import jakarta.validation.ConstraintViolationException;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -23,7 +19,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs against H2 built from schema.sql + data.sql; each test rolls back. */
 @DataJpaTest
@@ -35,9 +30,6 @@ class AccountRepositoryIntegrationTest {
 
     @Autowired
     private AccountRepository accountRepository;
-
-    @Autowired
-    private TransferHistoryRepository historyRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -52,50 +44,6 @@ class AccountRepositoryIntegrationTest {
         assertEquals(new BigDecimal("5000.00"), first.getBalance());
         assertEquals(new BigDecimal("1000.00"), second.getBalance());
         assertEquals(new BigDecimal("10000.00"), first.getLimits().getRemaining());
-    }
-
-    @Test
-    void accountTransfersAreLoadedLazilyFromHistory() {
-        Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        historyRepository.saveAndFlush(
-                source.recordTransfer(SECOND, new BigDecimal("10"), NOW, TransferDirection.OUTGOING));
-        entityManager.clear();
-
-        Account reloaded = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        Account other = accountRepository.findByAccountNumber(SECOND).orElseThrow();
-
-        assertEquals(1, reloaded.getTransfers().size());
-        assertEquals(SECOND, reloaded.getTransfers().getFirst().getCounterpartyAccountNumber());
-        assertTrue(other.getTransfers().isEmpty());
-    }
-
-    @Test
-    void findAllWithTransfersFetchesTransfersInTheSameQuery() {
-        Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        Instant earlier = NOW;
-        Instant later = earlier.plusSeconds(60);
-        // Two rows on one account (so a duplicating join would show), saved newest first to test @OrderBy.
-        historyRepository.saveAll(List.of(
-                source.recordTransfer(SECOND, new BigDecimal("20"), later, TransferDirection.OUTGOING),
-                source.recordTransfer(SECOND, new BigDecimal("10"), earlier, TransferDirection.OUTGOING)));
-        historyRepository.flush();
-        long accountCount = accountRepository.count();
-        entityManager.clear();
-        Statistics stats = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
-        stats.clear();
-
-        List<Account> accounts = accountRepository.findAllWithTransfers();
-        // Touch every collection, so a lazy or batch load would run (and be counted) here.
-        accounts.forEach(account -> account.getTransfers().size());
-
-        assertEquals(1, stats.getPrepareStatementCount());
-        assertEquals(accountCount, accounts.size()); // the LEFT JOIN must not duplicate accounts
-        assertEquals(accounts.stream().map(Account::getId).sorted().toList(),
-                accounts.stream().map(Account::getId).toList());
-        List<TransferHistory> transfers = accounts.stream()
-                .filter(a -> a.getAccountNumber().equals(FIRST)).findFirst().orElseThrow()
-                .getTransfers();
-        assertEquals(List.of(earlier, later), transfers.stream().map(TransferHistory::getTimestamp).toList());
     }
 
     @Test

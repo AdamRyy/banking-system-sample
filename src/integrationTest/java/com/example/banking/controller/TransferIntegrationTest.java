@@ -6,6 +6,8 @@ import com.example.banking.model.TransferHistory;
 import com.example.banking.repository.AccountRepository;
 import com.example.banking.repository.TransferHistoryRepository;
 import jakarta.persistence.EntityManager;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -106,34 +108,61 @@ class TransferIntegrationTest {
     }
 
     @Test
-    void allAccountsListShowsEachSideOfTheTransfer() throws Exception {
+    void transferHistoryIsPagedPerAccount() throws Exception {
         transfer(1, 2, "100").andExpect(status().isCreated());
+        transfer(1, 2, "50").andExpect(status().isCreated());
         entityManager.flush();
-        entityManager.clear();   // so GET really loads accounts and their transfers from H2
+        entityManager.clear();
 
-        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/transfers?page=0&size=1&sort=amount,desc")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].balance").value(4900.00))
-                .andExpect(jsonPath("$[0].transfers.length()").value(1))
-                .andExpect(jsonPath("$[0].transfers[0].direction").value("OUTGOING"))
-                .andExpect(jsonPath("$[0].transfers[0].counterpartyAccountNumber").value("65432109876543210987654321"))
-                .andExpect(jsonPath("$[0].transfers[0].amount").value(100.00))
-                .andExpect(jsonPath("$[1].id").value(2))
-                .andExpect(jsonPath("$[1].balance").value(1100.00))
-                .andExpect(jsonPath("$[1].transfers.length()").value(1))
-                .andExpect(jsonPath("$[1].transfers[0].direction").value("INCOMING"))
-                .andExpect(jsonPath("$[1].transfers[0].counterpartyAccountNumber").value("12345678901234567890123456"));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].direction").value("OUTGOING"))
+                .andExpect(jsonPath("$.content[0].counterpartyAccountNumber").value("65432109876543210987654321"))
+                .andExpect(jsonPath("$.content[0].amount").value(100.00))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(2));
+
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts/2/transfers")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].direction").value("INCOMING"))
+                .andExpect(jsonPath("$.content[1].direction").value("INCOMING"));
     }
 
     @Test
-    void allAccountsListShowsEmptyTransfersBeforeAnyTransfer() throws Exception {
-        mockMvc.perform(withValidHeaders(get("/api/v1/accounts")))
+    void transferHistoryOfUnknownAccountIsNotFound() throws Exception {
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts/99/transfers")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_NOT_FOUND"));
+    }
+
+    @Test
+    void transferHistoryRejectsSortThroughTheAccountRelation() throws Exception {
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/transfers?sort=account.balance,desc")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    /** Guards against N+1: the lazy account must never be loaded while mapping rows to DTOs. */
+    @Test
+    void transferHistoryPageRunsAFixedNumberOfQueries() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            transfer(1, 2, "10").andExpect(status().isCreated());
+        }
+        entityManager.flush();
+        entityManager.clear();
+        Statistics stats = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.clear();
+
+        mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/transfers?size=2")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].transfers").isEmpty())
-                .andExpect(jsonPath("$[1].transfers").isEmpty());
+                .andExpect(jsonPath("$.content.length()").value(2));
+
+        assertEquals(3, stats.getPrepareStatementCount());   // existsById + page select + count
+        assertEquals(2, stats.getEntityLoadCount());          // the 2 history rows; no Account was loaded
     }
 
     @Test

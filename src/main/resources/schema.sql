@@ -19,4 +19,4 @@ CREATE TABLE transfer_history (
     CONSTRAINT fk_transfer_history_account FOREIGN KEY (account_id) REFERENCES accounts (id)
 );
 
-CREATE INDEX idx_transfer_history_account_id ON transfer_history (account_id);
+CREATE INDEX idx_transfer_history_account_id_executed_at ON transfer_history (account_id, executed_at);

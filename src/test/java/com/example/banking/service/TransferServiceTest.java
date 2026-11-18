@@ -134,10 +134,6 @@ class TransferServiceTest {
         assertEquals(source.getAccountNumber(), incoming.getCounterpartyAccountNumber());
         assertEquals(new BigDecimal("100.50"), incoming.getAmount());
         assertEquals(NOW, incoming.getTimestamp());
-
-        // The TransferHistory constructor keeps the inverse side (Account.transfers) in sync.
-        assertEquals(List.of(outgoing), source.getTransfers());
-        assertEquals(List.of(incoming), target.getTransfers());
     }
 
     @Test

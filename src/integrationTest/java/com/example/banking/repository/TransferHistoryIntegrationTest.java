@@ -10,9 +10,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -47,6 +51,31 @@ class TransferHistoryIntegrationTest {
         assertEquals(new BigDecimal("100.50"), loaded.getAmount());
         assertEquals(NOW, loaded.getTimestamp());
         assertEquals(TransferDirection.OUTGOING, loaded.getDirection());
+    }
+
+    @Test
+    void findByAccountIdPagesOnlyThatAccountsRowsInTheRequestedOrder() {
+        Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
+        Account target = accountRepository.findByAccountNumber(SECOND).orElseThrow();
+        historyRepository.saveAll(List.of(
+                source.recordTransfer(SECOND, new BigDecimal("10"), NOW, TransferDirection.OUTGOING),
+                source.recordTransfer(SECOND, new BigDecimal("30"), NOW.plusSeconds(60), TransferDirection.OUTGOING),
+                source.recordTransfer(SECOND, new BigDecimal("20"), NOW.plusSeconds(120), TransferDirection.OUTGOING),
+                target.recordTransfer(FIRST, new BigDecimal("10"), NOW, TransferDirection.INCOMING)));
+        historyRepository.flush();
+        entityManager.clear();
+
+        Page<TransferHistory> first = historyRepository.findByAccountId(source.getId(),
+                PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "timestamp")));
+        Page<TransferHistory> second = historyRepository.findByAccountId(source.getId(),
+                PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "timestamp")));
+
+        assertEquals(3, first.getTotalElements());
+        assertEquals(2, first.getTotalPages());
+        assertEquals(List.of(new BigDecimal("20.00"), new BigDecimal("30.00")),
+                first.getContent().stream().map(TransferHistory::getAmount).toList());
+        assertEquals(List.of(new BigDecimal("10.00")),
+                second.getContent().stream().map(TransferHistory::getAmount).toList());
     }
 
     @ParameterizedTest
