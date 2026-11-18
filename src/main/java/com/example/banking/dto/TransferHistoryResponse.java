@@ -9,6 +9,7 @@ import java.time.Instant;
 public record TransferHistoryResponse(Long id, TransferDirection direction, String counterpartyAccountNumber,
                                       BigDecimal amount, Instant timestamp) {
 
+    /** Reads only the row's own columns: calling getAccount() here would load the lazy account. */
     public static TransferHistoryResponse from(TransferHistory history) {
         return new TransferHistoryResponse(history.getId(), history.getDirection(),
                 history.getCounterpartyAccountNumber(), history.getAmount(), history.getTimestamp());

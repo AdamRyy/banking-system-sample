@@ -104,6 +104,11 @@ public class GlobalExceptionHandler {
                 "%s: invalid value '%s'".formatted(ex.getName(), ex.getValue()));
     }
 
+    @ExceptionHandler(InvalidSortException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidSort(InvalidSortException ex) {
+        return build(ErrorCode.INVALID_PARAMETER, ex.getMessage());
+    }
+
     /** Missing or unparsable JSON body. */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {

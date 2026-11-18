@@ -9,8 +9,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotNull;
@@ -22,9 +20,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Read access is public. State changes only through {@link #debit(BigDecimal, Clock)}, which keeps
@@ -60,11 +55,6 @@ public class Account {
     @Version
     private Long version;
 
-    /** Inverse side of {@link TransferHistory#getAccount()}; lazy ({@code @OneToMany} default), loaded on first access. */
-    @OneToMany(mappedBy = "account")
-    @OrderBy("timestamp ASC, id ASC") // oldest first; id breaks ties between rows of the same instant
-    private List<TransferHistory> transfers = new ArrayList<>();
-
     public Account(Long id, String accountNumber, BigDecimal balance, Limits limits) {
         this.id = id;
         this.accountNumber = accountNumber;
@@ -84,16 +74,10 @@ public class Account {
         limits.use(amount);
     }
 
-    public List<TransferHistory> getTransfers() {
-        return Collections.unmodifiableList(transfers);
-    }
-
-    /** The only way to create a TransferHistory, so both sides of the relation stay in sync. Doesn't load the lazy list. */
+    /** The only way to create a TransferHistory for this account. */
     public TransferHistory recordTransfer(String counterpartyAccountNumber, BigDecimal amount, Instant timestamp,
                                           TransferDirection direction) {
-        TransferHistory transfer = new TransferHistory(this, counterpartyAccountNumber, amount, timestamp, direction);
-        transfers.add(transfer);
-        return transfer;
+        return new TransferHistory(this, counterpartyAccountNumber, amount, timestamp, direction);
     }
 
     /** Incoming money: no limit applies, limits only cap outgoing transfers. */

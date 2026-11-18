@@ -3,6 +3,7 @@ package com.example.banking.controller;
 import com.example.banking.config.WebConfig;
 import com.example.banking.model.Limits;
 import com.example.banking.service.AccountService;
+import com.example.banking.service.TransferHistoryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -37,6 +38,9 @@ class RequestHeadersInterceptorTest {
 
     @MockitoBean
     private AccountService accountService;
+
+    @MockitoBean   // not used here, but AccountController needs it to start
+    private TransferHistoryService transferHistoryService;
 
     @Test
     void validHeadersPassAndCorrelationIdIsEchoed() throws Exception {

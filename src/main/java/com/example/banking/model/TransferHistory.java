@@ -63,7 +63,7 @@ public class TransferHistory {
     @Column(length = 8, nullable = false)
     private TransferDirection direction;
 
-    /** Use {@link Account#recordTransfer}, which also adds the row to the account's list. */
+    /** Use {@link Account#recordTransfer}. */
     TransferHistory(Account account, String counterpartyAccountNumber, BigDecimal amount,
                     Instant timestamp, TransferDirection direction) {
         this.account = account;
