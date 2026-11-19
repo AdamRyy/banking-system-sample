@@ -57,7 +57,7 @@ public class Limits {
         }
     }
 
-    /** Truncated to micros: the column is TIMESTAMP(6), and H2 would round 23:59:59.999999999 up to the next day. */
+    /** Truncated to micros: the column is TIMESTAMP(6), and the database would round 23:59:59.999999999 up to the next day. */
     private static Instant endOfDay(Instant now, ZoneId zone) {
         return LocalDate.ofInstant(now, zone).atTime(LocalTime.MAX).atZone(zone).toInstant()
                 .truncatedTo(ChronoUnit.MICROS);

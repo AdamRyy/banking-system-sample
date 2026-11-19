@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.example.banking.TestcontainersConfiguration;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.math.BigDecimal;
@@ -20,8 +22,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Runs against H2 built from schema.sql + data.sql; each test rolls back. */
+/** Runs against Testcontainers Postgres built from schema.sql + data.sql; each test rolls back. */
 @DataJpaTest
+@Import(TestcontainersConfiguration.class)
 class AccountRepositoryIntegrationTest {
 
     private static final String FIRST = "12345678901234567890123456";

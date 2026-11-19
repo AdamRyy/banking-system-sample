@@ -53,13 +53,13 @@ public class TransferHistory {
     @Column(precision = 17, scale = MoneyUtils.SCALE, nullable = false)
     private BigDecimal amount;
 
-    // "timestamp" is a keyword in H2, so the column is named executed_at.
+    // "timestamp" is a SQL keyword, so the column is named executed_at.
     @Column(name = "executed_at", nullable = false)
     private Instant timestamp;
 
     @NotNull
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.VARCHAR) // H2Dialect would otherwise expect a native ENUM column
+    @JdbcTypeCode(SqlTypes.VARCHAR) // the dialect could otherwise expect a native ENUM column
     @Column(length = 8, nullable = false)
     private TransferDirection direction;
 

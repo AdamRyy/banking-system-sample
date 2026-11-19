@@ -2,13 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Spring Boot 4.1 (Java 25, Lombok, Spring Data JPA) sample banking REST API. State lives in an in-memory H2 database, rebuilt on every start: `schema.sql` creates the tables (Hibernate only validates them, `ddl-auto=validate`) and `data.sql` seeds two test accounts (ids 1 and 2). Change the schema in `schema.sql` and the entity together, or startup fails.
+Spring Boot 4.1 (Java 25, Lombok, Spring Data JPA) sample banking REST API. State lives in PostgreSQL 17 running in Docker (`docker-compose.yml`; the app itself runs on the host), rebuilt on every start: `schema.sql` drops and creates the tables (Hibernate only validates them, `ddl-auto=validate`) and `data.sql` seeds two test accounts (ids 1 and 2). Change the schema in `schema.sql` and the entity together, or startup fails.
 
 ## Commands
 
 ```bash
+cp .env.example .env                      # once: DB credentials (git-ignored), read by compose and the app
+docker compose up -d                      # start PostgreSQL first (needed for spring-boot:run)
 ./mvnw test                               # unit tests only
-./mvnw verify                             # unit + integration tests
+./mvnw verify                             # unit + integration tests (needs Docker: Testcontainers)
 ./mvnw test -Dtest=TransferServiceTest    # one unit test class
 ./mvnw test -Dtest=TransferServiceTest#methodName   # one unit test method
 ./mvnw test-compile failsafe:integration-test failsafe:verify -Dit.test=TransferIntegrationTest   # one integration test class
@@ -18,7 +20,7 @@ Spring Boot 4.1 (Java 25, Lombok, Spring Data JPA) sample banking REST API. Stat
 Unit tests live in `src/test/java`, integration tests in `src/integrationTest/java` (see ADR 0006). Maven picks the runner
 by class name, not by directory: `*IntegrationTest` runs in Failsafe, everything else in Surefire.
 
-Transfers change the H2 data until the app restarts, so run manual requests against a freshly started app.
+Transfers change the data until the app restarts, so run manual requests against a freshly started app.
 
 ## Conventions
 
@@ -35,3 +37,4 @@ Architecture decisions live in `docs/adr`, one ADR per decision (index: `docs/ad
 @docs/adr/0004-transfers-transaction-and-optimistic-locking.md
 @docs/adr/0006-separate-integration-test-source-set.md
 @docs/adr/0007-paginated-list-endpoints.md
+@docs/adr/0008-postgresql-in-docker.md

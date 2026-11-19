@@ -5,12 +5,12 @@ Date: 2026-11-16
 Supersedes: 0005
 
 ## Context
-Fast unit tests and tests that start Spring or H2 were mixed in `src/test/java` and always ran together.
+Fast unit tests and tests that start Spring or a database were mixed in `src/test/java` and always ran together.
 
 ## Decision
 - `src/test/java`: unit tests, run by Surefire in `./mvnw test`. Service tests are Mockito tests (mocked
   `AccountRepository`). Controllers are tested with `@WebMvcTest`.
-- `src/integrationTest/java`: tests that need a Spring context or H2, run by Failsafe in `./mvnw verify`:
+- `src/integrationTest/java`: tests that need a Spring context or a database (Testcontainers Postgres, see 0008), run by Failsafe in `./mvnw verify`:
   - `AccountRepositoryIntegrationTest` and `TransferHistoryIntegrationTest` (`@DataJpaTest`): mappings, constraints, locking.
   - `TransferIntegrationTest` (`@SpringBootTest` + MockMvc + `@Transactional`): the full request path.
 - `build-helper-maven-plugin` adds `src/integrationTest/java` as a second test source root. Surefire excludes

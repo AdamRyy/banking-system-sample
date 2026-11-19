@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.example.banking.TestcontainersConfiguration;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -21,8 +23,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Runs against H2 built from schema.sql + data.sql; each test rolls back. */
+/** Runs against Testcontainers Postgres built from schema.sql + data.sql; each test rolls back. */
 @DataJpaTest
+@Import(TestcontainersConfiguration.class)
 class TransferHistoryIntegrationTest {
 
     private static final String FIRST = "12345678901234567890123456";
@@ -43,7 +46,7 @@ class TransferHistoryIntegrationTest {
         Account source = accountRepository.findByAccountNumber(FIRST).orElseThrow();
 
         Long id = historyRepository.saveAndFlush(source.recordTransfer(SECOND, new BigDecimal("100.5"), NOW, TransferDirection.OUTGOING)).getId();
-        entityManager.clear(); // force a real read from H2, not the persistence context
+        entityManager.clear(); // force a real read from the database, not the persistence context
 
         TransferHistory loaded = historyRepository.findById(id).orElseThrow();
         assertEquals(FIRST, loaded.getAccount().getAccountNumber());
