@@ -2,10 +2,13 @@ package com.example.banking.service;
 
 import com.example.banking.dto.TransferRequest;
 import com.example.banking.dto.TransferResponse;
+import com.example.banking.event.TransferCompletedEvent;
 import com.example.banking.model.Account;
 import com.example.banking.model.TransferDirection;
+import com.example.banking.model.TransferHistory;
 import com.example.banking.repository.TransferHistoryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +23,7 @@ public class TransferService {
     private final AccountService accountService;
     private final TransferHistoryRepository transferHistoryRepository;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
 
     /**
@@ -35,9 +39,15 @@ public class TransferService {
 
         // One history row per side, so each account sees the transfer in its own history.
         Instant now = clock.instant();
-        transferHistoryRepository.saveAll(List.of(
-                source.recordTransfer(target.getAccountNumber(), request.amount(), now, TransferDirection.OUTGOING),
+        TransferHistory outgoing =
+                source.recordTransfer(target.getAccountNumber(), request.amount(), now, TransferDirection.OUTGOING);
+        transferHistoryRepository.saveAll(List.of(outgoing,
                 target.recordTransfer(source.getAccountNumber(), request.amount(), now, TransferDirection.INCOMING)));
+
+        // Not sent yet: TransferEventPublisher forwards it to Kafka only after commit.
+        // There's no transfer entity, so the OUTGOING row's id (set by the IDENTITY insert) identifies the transfer.
+        eventPublisher.publishEvent(new TransferCompletedEvent(outgoing.getId(), source.getAccountNumber(),
+                target.getAccountNumber(), outgoing.getAmount(), now));
         return TransferResponse.from(request, source);
     }
 }

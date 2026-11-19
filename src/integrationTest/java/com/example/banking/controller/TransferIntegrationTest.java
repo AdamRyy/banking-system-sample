@@ -1,5 +1,6 @@
 package com.example.banking.controller;
 
+import com.example.banking.KafkaTestcontainersConfiguration;
 import com.example.banking.TestcontainersConfiguration;
 import com.example.banking.model.Account;
 import com.example.banking.model.TransferDirection;
@@ -38,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * database stays as data.sql left it.
  */
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, KafkaTestcontainersConfiguration.class})
 @AutoConfigureMockMvc
 @Transactional
 class TransferIntegrationTest {

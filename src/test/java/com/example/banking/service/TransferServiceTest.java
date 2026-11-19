@@ -2,6 +2,7 @@ package com.example.banking.service;
 
 import com.example.banking.dto.TransferRequest;
 import com.example.banking.dto.TransferResponse;
+import com.example.banking.event.TransferCompletedEvent;
 import com.example.banking.exception.AccountNotFoundException;
 import com.example.banking.exception.InsufficientFundsException;
 import com.example.banking.exception.TransferLimitExceededException;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -53,14 +55,17 @@ class TransferServiceTest {
     @Mock
     private TransferHistoryRepository transferHistoryRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private TransferService transferService;
     private Account source;
     private Account target;
 
     @BeforeEach
     void setUp() {
-        transferService = new TransferService(
-                new AccountService(accountRepository), transferHistoryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+        transferService = new TransferService(new AccountService(accountRepository), transferHistoryRepository,
+                Clock.fixed(NOW, ZoneOffset.UTC), eventPublisher);
     }
 
     /** Dirty checking persists account changes, so the service must never save() an account explicitly. */
@@ -137,6 +142,21 @@ class TransferServiceTest {
     }
 
     @Test
+    void successfulTransferPublishesTransferCompletedEvent() {
+        givenAccounts("5000");
+
+        transferService.transfer(request("100.5"));
+
+        ArgumentCaptor<TransferCompletedEvent> captor = ArgumentCaptor.forClass(TransferCompletedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());   // exactly once
+        TransferCompletedEvent event = captor.getValue();
+        assertEquals(source.getAccountNumber(), event.sourceAccountNumber());
+        assertEquals(target.getAccountNumber(), event.targetAccountNumber());
+        assertEquals(new BigDecimal("100.50"), event.amount());
+        assertEquals(NOW, event.timestamp());
+    }
+
+    @Test
     void amountAboveRemainingLimitIsRejectedAndStateUnchanged() {
         givenAccounts("5000");
 
@@ -144,7 +164,7 @@ class TransferServiceTest {
 
         assertSource("5000.00", "10000.00");
         assertEquals(new BigDecimal("1000.00"), target.getBalance());
-        verifyNoInteractions(transferHistoryRepository);
+        verifyNoInteractions(transferHistoryRepository, eventPublisher);
     }
 
     @Test
@@ -157,7 +177,7 @@ class TransferServiceTest {
         assertEquals("Account 1 has insufficient funds: requested 600.00, available 500.00", ex.getMessage());
         assertSource("500.00", "10000.00");
         assertEquals(new BigDecimal("1000.00"), target.getBalance());
-        verifyNoInteractions(transferHistoryRepository);
+        verifyNoInteractions(transferHistoryRepository, eventPublisher);
     }
 
     @Test
@@ -166,7 +186,7 @@ class TransferServiceTest {
 
         assertThrows(AccountNotFoundException.class,
                 () -> transferService.transfer(new TransferRequest(3L, 1L, new BigDecimal("10"))));
-        verifyNoInteractions(transferHistoryRepository);
+        verifyNoInteractions(transferHistoryRepository, eventPublisher);
     }
 
     @Test
@@ -180,7 +200,7 @@ class TransferServiceTest {
 
         assertEquals("Account with id 3 not found", ex.getMessage());
         assertSource("5000.00", "10000.00");
-        verifyNoInteractions(transferHistoryRepository);
+        verifyNoInteractions(transferHistoryRepository, eventPublisher);
     }
 
     @Test
@@ -201,7 +221,7 @@ class TransferServiceTest {
     void limitUsedYesterdayIsAvailableAgainToday() {
         givenAccounts("20000");
         TransferService yesterday = new TransferService(new AccountService(accountRepository),
-                transferHistoryRepository, Clock.fixed(NOW.minus(1, ChronoUnit.DAYS), ZoneOffset.UTC));
+                transferHistoryRepository, Clock.fixed(NOW.minus(1, ChronoUnit.DAYS), ZoneOffset.UTC), eventPublisher);
         yesterday.transfer(request("9000"));
         assertSource("11000.00", "1000.00");
 
