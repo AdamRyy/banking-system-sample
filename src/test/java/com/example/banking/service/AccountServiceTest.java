@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
-/** Unit test: the repository is mocked; PersistenceTest covers real H2 access. */
+/** Unit test: the repository is mocked; the *IntegrationTest classes cover real database access. */
 @ExtendWith(MockitoExtension.class)
 class AccountServiceTest {
 

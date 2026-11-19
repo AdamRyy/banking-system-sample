@@ -1,5 +1,6 @@
 package com.example.banking.controller;
 
+import com.example.banking.TestcontainersConfiguration;
 import com.example.banking.model.Account;
 import com.example.banking.model.TransferDirection;
 import com.example.banking.model.TransferHistory;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -31,11 +33,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Full stack against the seed data in H2: real interceptor, services, repositories.
+ * Full stack against the seed data in Testcontainers Postgres: real interceptor, services, repositories.
  * MockMvc runs on the test thread, so @Transactional rolls every test back and the shared
- * in-memory DB stays as data.sql left it.
+ * database stays as data.sql left it.
  */
 @SpringBootTest
+@Import(TestcontainersConfiguration.class)
 @AutoConfigureMockMvc
 @Transactional
 class TransferIntegrationTest {
@@ -58,14 +61,14 @@ class TransferIntegrationTest {
                 .content("{\"sourceId\":%d,\"targetId\":%d,\"amount\":%s}".formatted(sourceId, targetId, amount)));
     }
 
-    /** Reads from H2, not from the persistence context. */
+    /** Reads from the database, not from the persistence context. */
     private BigDecimal balanceOf(long id) {
         entityManager.flush();
         entityManager.clear();
         return accountRepository.findById(id).map(Account::getBalance).orElseThrow();
     }
 
-    /** All history rows, read from H2. data.sql seeds none, so each test starts from an empty table. */
+    /** All history rows, read from the database. data.sql seeds none, so each test starts from an empty table. */
     private List<TransferHistory> history() {
         entityManager.flush();
         entityManager.clear();
