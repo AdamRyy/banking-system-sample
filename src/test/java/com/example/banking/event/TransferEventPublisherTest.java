@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,5 +46,16 @@ class TransferEventPublisherTest {
                 .thenReturn(CompletableFuture.failedFuture(new RuntimeException("broker down")));
 
         publisher.on(event);   // only logs: the transfer is already committed
+    }
+
+    /** The path a stopped broker takes: send() itself throws after max.block.ms. */
+    @Test
+    void sendThrowingSynchronouslyDoesNotThrow() {
+        TransferCompletedEvent event = new TransferCompletedEvent(7L, "12345678901234567890123456",
+                "65432109876543210987654321", new BigDecimal("100.50"), Instant.parse("2026-11-12T10:15:30Z"));
+        when(kafkaTemplate.send("bank-transfers", event.sourceAccountNumber(), event))
+                .thenThrow(new KafkaException("Topic bank-transfers not present in metadata"));
+
+        assertDoesNotThrow(() -> publisher.on(event));
     }
 }

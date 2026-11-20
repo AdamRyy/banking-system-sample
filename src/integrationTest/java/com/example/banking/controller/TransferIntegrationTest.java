@@ -80,10 +80,10 @@ class TransferIntegrationTest {
     void transferMovesMoneyBetweenSeedAccounts() throws Exception {
         transfer(1, 2, "100")
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accBalance").value(4900.00))
-                .andExpect(jsonPath("$.remainingLimit").value(9900.00));
+                .andExpect(jsonPath("$.accBalance").value(49900.00))
+                .andExpect(jsonPath("$.remainingLimit").value(19900.00));
 
-        assertEquals(new BigDecimal("4900.00"), balanceOf(1));
+        assertEquals(new BigDecimal("49900.00"), balanceOf(1));
         assertEquals(new BigDecimal("1100.00"), balanceOf(2));
 
         List<TransferHistory> history = history().stream()
@@ -108,7 +108,7 @@ class TransferIntegrationTest {
         mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/limits")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.used").value(100.00))
-                .andExpect(jsonPath("$.remaining").value(9900.00));
+                .andExpect(jsonPath("$.remaining").value(19900.00));
     }
 
     @Test
@@ -175,7 +175,7 @@ class TransferIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_NOT_FOUND"));
 
-        assertEquals(new BigDecimal("5000.00"), balanceOf(1));
+        assertEquals(new BigDecimal("50000.00"), balanceOf(1));
         assertTrue(history().isEmpty());
     }
 
@@ -186,7 +186,7 @@ class TransferIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INSUFFICIENT_FUNDS"));
 
         assertEquals(new BigDecimal("1000.00"), balanceOf(2));
-        assertEquals(new BigDecimal("5000.00"), balanceOf(1));
+        assertEquals(new BigDecimal("50000.00"), balanceOf(1));
         assertTrue(history().isEmpty());
     }
 }

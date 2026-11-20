@@ -44,9 +44,9 @@ class AccountRepositoryIntegrationTest {
         assertEquals(2, accounts.size());
         Account first = accountRepository.findByAccountNumber(FIRST).orElseThrow();
         Account second = accountRepository.findByAccountNumber(SECOND).orElseThrow();
-        assertEquals(new BigDecimal("5000.00"), first.getBalance());
+        assertEquals(new BigDecimal("50000.00"), first.getBalance());
         assertEquals(new BigDecimal("1000.00"), second.getBalance());
-        assertEquals(new BigDecimal("10000.00"), first.getLimits().getRemaining());
+        assertEquals(new BigDecimal("20000.00"), first.getLimits().getRemaining());
     }
 
     @Test

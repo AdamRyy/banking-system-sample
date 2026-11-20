@@ -10,6 +10,7 @@
 | [0006](0006-separate-integration-test-source-set.md) | Separate source set for integration tests |
 | [0007](0007-paginated-list-endpoints.md) | Paginated list endpoints |
 | [0008](0008-postgresql-in-docker.md) | PostgreSQL in Docker, Testcontainers for integration tests |
+| [0009](0009-transfer-events-on-kafka.md) | Transfer events on Kafka, sent after commit |
 
 To add one, copy the format into `NNNN-short-title.md` using the next number, add it here, and import it
 in `CLAUDE.md`. Don't rewrite an accepted ADR to change a decision: add a new ADR, set the old one's

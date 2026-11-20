@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -144,12 +145,21 @@ class TransferServiceTest {
     @Test
     void successfulTransferPublishesTransferCompletedEvent() {
         givenAccounts("5000");
+        // Stand in for the IDENTITY insert, which sets the ids during saveAll.
+        when(transferHistoryRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<TransferHistory> rows = invocation.getArgument(0);
+            for (TransferHistory row : rows) {
+                ReflectionTestUtils.setField(row, "id", row.getDirection() == TransferDirection.OUTGOING ? 41L : 42L);
+            }
+            return rows;
+        });
 
         transferService.transfer(request("100.5"));
 
         ArgumentCaptor<TransferCompletedEvent> captor = ArgumentCaptor.forClass(TransferCompletedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());   // exactly once
         TransferCompletedEvent event = captor.getValue();
+        assertEquals(41L, event.transferId());   // the OUTGOING row's id
         assertEquals(source.getAccountNumber(), event.sourceAccountNumber());
         assertEquals(target.getAccountNumber(), event.targetAccountNumber());
         assertEquals(new BigDecimal("100.50"), event.amount());

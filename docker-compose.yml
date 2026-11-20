@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # Single-node Kafka in KRaft mode (no ZooKeeper). Not used by the app yet.
+  # Single-node Kafka in KRaft mode (no ZooKeeper). The app needs it at startup and publishes transfer events to it.
   # Setting any KAFKA_* variable makes the image ignore its bundled server.properties, so the full config is here.
   kafka:
     image: apache/kafka:4.1.0

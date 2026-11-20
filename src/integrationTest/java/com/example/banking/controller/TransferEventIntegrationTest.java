@@ -3,29 +3,42 @@ package com.example.banking.controller;
 import com.example.banking.KafkaTestcontainersConfiguration;
 import com.example.banking.TestcontainersConfiguration;
 import com.example.banking.config.KafkaConfig;
+import com.example.banking.consumer.FraudDetectionConsumer;
 import com.example.banking.event.TransferCompletedEvent;
+import com.example.banking.model.TransferDirection;
+import com.example.banking.model.TransferHistory;
+import com.example.banking.repository.TransferHistoryRepository;
+import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import static com.example.banking.controller.TestHeaders.withValidHeaders;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,6 +53,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({TestcontainersConfiguration.class, KafkaTestcontainersConfiguration.class})
 @AutoConfigureMockMvc
 @DirtiesContext
+@ExtendWith(OutputCaptureExtension.class)
 class TransferEventIntegrationTest {
 
     private static final String SOURCE_ACCOUNT = "12345678901234567890123456";   // id 1 in data.sql
@@ -54,12 +68,24 @@ class TransferEventIntegrationTest {
 
     private Consumer<String, TransferCompletedEvent> consumer;
 
+    @Autowired
+    private TransferHistoryRepository transferHistoryRepository;
+
+    @Autowired
+    private KafkaAdmin kafkaAdmin;
+
     @BeforeEach
     void subscribe() {
         // Fresh group per test, starting at the end, so each test sees only the records it caused.
         consumer = consumerFactory.createConsumer("test-" + UUID.randomUUID(), null);
         consumer.subscribe(List.of(KafkaConfig.BANK_TRANSFERS_TOPIC));
-        consumer.poll(Duration.ofSeconds(5));   // join the group and get partitions assigned
+        // One poll can return before the group join finishes. Seeking an empty assignment would do nothing,
+        // and auto-offset-reset=earliest would then replay older records.
+        Instant deadline = Instant.now().plusSeconds(30);
+        while (consumer.assignment().isEmpty()) {
+            assertTrue(Instant.now().isBefore(deadline), "no partitions assigned within 30s");
+            consumer.poll(Duration.ofMillis(200));
+        }
         consumer.seekToEnd(consumer.assignment());
         consumer.assignment().forEach(consumer::position);   // resolve the lazy seek now, before the transfer
     }
@@ -76,8 +102,42 @@ class TransferEventIntegrationTest {
                 .andExpect(status().is(expectedStatus));
     }
 
+    /** The @KafkaListeners log on their own threads, so wait until the line shows up. */
+    private static void awaitOutput(CapturedOutput output, String expected) throws InterruptedException {
+        Instant deadline = Instant.now().plusSeconds(30);
+        while (!output.getOut().contains(expected)) {
+            assertTrue(Instant.now().isBefore(deadline), "not logged within 30s: " + expected);
+            Thread.sleep(200);
+        }
+    }
+
+    /**
+     * Waits until the group has committed past the record. The container commits only after the listener
+     * returned, so after this an absent log line really means the listener chose not to log.
+     */
+    private void awaitProcessed(ConsumerRecord<?, ?> record) throws Exception {
+        TopicPartition partition = new TopicPartition(record.topic(), record.partition());
+        try (Admin admin = Admin.create(kafkaAdmin.getConfigurationProperties())) {
+            Instant deadline = Instant.now().plusSeconds(30);
+            while (true) {
+                OffsetAndMetadata committed = admin.listConsumerGroupOffsets(FraudDetectionConsumer.GROUP_ID)
+                        .partitionsToOffsetAndMetadata().get().get(partition);
+                if (committed != null && committed.offset() > record.offset()) {
+                    return;
+                }
+                assertTrue(Instant.now().isBefore(deadline), FraudDetectionConsumer.GROUP_ID + " didn't process the record within 30s");
+                Thread.sleep(200);
+            }
+        }
+    }
+
+    /** Ends at the line break, so transfer 1 doesn't match "Transfer ID: 13". */
+    private static String fraudAlertFor(long transferId) {
+        return "Transfer ID: " + transferId + "\n";
+    }
+
     @Test
-    void committedTransferPublishesEventKeyedBySourceAccount() throws Exception {
+    void committedTransferPublishesEventKeyedBySourceAccount(CapturedOutput output) throws Exception {
         transfer("250.00", 201);
 
         ConsumerRecord<String, TransferCompletedEvent> record =
@@ -85,11 +145,33 @@ class TransferEventIntegrationTest {
 
         assertEquals(SOURCE_ACCOUNT, record.key());
         TransferCompletedEvent event = record.value();
-        assertNotNull(event.transferId());
+        // Other tests in this context commit too, so match the row by amount. Its id is the transferId.
+        List<TransferHistory> outgoing = transferHistoryRepository.findAll().stream()
+                .filter(row -> row.getDirection() == TransferDirection.OUTGOING)
+                .filter(row -> row.getAmount().compareTo(new BigDecimal("250.00")) == 0)
+                .toList();
+        assertEquals(1, outgoing.size());
+        assertEquals(outgoing.getFirst().getId(), event.transferId());
         assertEquals(SOURCE_ACCOUNT, event.sourceAccountNumber());
         assertEquals(TARGET_ACCOUNT, event.targetAccountNumber());
         assertEquals(0, new BigDecimal("250.00").compareTo(event.amount()));
         assertNotNull(event.timestamp());
+
+        awaitOutput(output, "Transfer " + event.transferId() + " completed.");
+        awaitProcessed(record);
+        assertFalse(output.getOut().contains(fraudAlertFor(event.transferId())));   // below the fraud threshold
+    }
+
+    @Test
+    void largeTransferRaisesFraudAlert(CapturedOutput output) throws Exception {
+        transfer("15000.00", 201);
+
+        TransferCompletedEvent event = KafkaTestUtils.getSingleRecord(consumer, KafkaConfig.BANK_TRANSFERS_TOPIC,
+                Duration.ofSeconds(10)).value();
+        // The whole block, because the notification logs the same "Amount: ..." line.
+        awaitOutput(output, "Suspicious transfer detected!\n" + fraudAlertFor(event.transferId())
+                + "Amount: 15000.00 PLN");
+        awaitOutput(output, "Transfer " + event.transferId() + " completed.");   // notification still sent
     }
 
     @Test

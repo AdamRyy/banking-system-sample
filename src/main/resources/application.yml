@@ -47,8 +47,13 @@ spring:
       acks: all   # wait for all in-sync replicas (only one here, but the right setting for production)
       properties:
         enable.idempotence: true              # the broker drops duplicates caused by producer retries
+        # send() runs on the request thread after commit; when the broker is down it waits up to this long
+        # for metadata (default 60s), and that delays the HTTP response.
+        max.block.ms: 5000
         spring.json.add.type.headers: false   # the JSON is the contract, not a Java class name in a header
-    # No @KafkaListener yet; these settings are for the upcoming consumer.
+    # Shared by every @KafkaListener. Each listener sets its own groupId; this group-id is only the fallback.
+    # A new group starts at the earliest offset. Kafka keeps its records across app restarts (unlike Postgres),
+    # so a group's first start replays every event already on the topic.
     consumer:
       group-id: banking-system
       auto-offset-reset: earliest
