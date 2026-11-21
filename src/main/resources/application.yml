@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: banking-system-sample
+
+  # Credentials live in .env (git-ignored), shared with docker compose. Real environment variables win over it.
+  config:
+    import: optional:file:.env[.properties]
+
+  # Always answer in English, whatever the client's Accept-Language or the server's OS locale.
+  # "fixed" ignores Accept-Language; without it, Bean Validation messages switch language (e.g. Polish).
+  web:
+    locale: en
+    locale-resolver: fixed
+    error:
+      whitelabel:
+        enabled: false   # all errors are rendered by ApiErrorController / GlobalExceptionHandler
+
+  # PostgreSQL from docker-compose.yml (start it with: docker compose up -d).
+  # Rebuilt from schema.sql + data.sql on every start, so data does not survive a restart.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  sql:
+    init:
+      mode: always   # required for a non-embedded database, otherwise schema.sql and data.sql are skipped
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # schema.sql owns the tables; Hibernate only checks the entities match them
+    open-in-view: false
+    show-sql: true
+    properties:
+      # hibernate.format_sql: true
+      # Logs per-session stats (e.g. "N JDBC statements executed"), handy for spotting N+1 selects.
+      hibernate.generate_statistics: true
+
+  # Kafka from docker-compose.yml (single KRaft broker). Override with SPRING_KAFKA_BOOTSTRAP_SERVERS.
+  kafka:
+    bootstrap-servers: localhost:9092
+    admin:
+      # Fail startup when the broker is unreachable or the topics can't be created, instead of only logging an error.
+      fail-fast: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      acks: all   # wait for all in-sync replicas (only one here, but the right setting for production)
+      properties:
+        enable.idempotence: true              # the broker drops duplicates caused by producer retries
+        # send() runs on the request thread after commit; when the broker is down it waits up to this long
+        # for metadata (default 60s), and that delays the HTTP response.
+        max.block.ms: 5000
+        spring.json.add.type.headers: false   # the JSON is the contract, not a Java class name in a header
+    # Shared by every @KafkaListener. Each listener sets its own groupId; this group-id is only the fallback.
+    # A new group starts at the earliest offset. Kafka keeps its records across app restarts (unlike Postgres),
+    # so a group's first start replays every event already on the topic.
+    consumer:
+      group-id: banking-system
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # Turns a malformed record into a handled error instead of an endless poll loop on the same offset.
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+        spring.json.value.default.type: com.example.banking.event.TransferCompletedEvent
+        spring.json.use.type.headers: false
+
+app:
+  security:
+    token: token-123   # hardcoded bearer token every request must send

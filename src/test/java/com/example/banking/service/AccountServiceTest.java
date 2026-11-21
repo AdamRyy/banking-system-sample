@@ -13,9 +13,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 /** Unit test: the repository is mocked; the *IntegrationTest classes cover real database access. */
@@ -35,22 +34,22 @@ class AccountServiceTest {
     void getAccountReturnsAccountFromRepository() {
         when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
 
-        assertSame(account, accountService.getAccount(1L));
+        assertThat(accountService.getAccount(1L)).isSameAs(account);
     }
 
     @Test
     void getLimitsReturnsLimitsForExistingAccount() {
         when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
 
-        assertEquals(new BigDecimal("10000.00"), accountService.getLimits(1L).getLimit());
+        assertThat(accountService.getLimits(1L).getLimit()).isEqualTo(new BigDecimal("10000.00"));
     }
 
     @Test
     void getLimitsThrowsForUnknownAccount() {
         when(accountRepository.findById(99L)).thenReturn(Optional.empty());
 
-        AccountNotFoundException ex = assertThrows(AccountNotFoundException.class, () -> accountService.getLimits(99L));
-
-        assertEquals("Account with id 99 not found", ex.getMessage());
+        assertThatThrownBy(() -> accountService.getLimits(99L))
+                .isInstanceOf(AccountNotFoundException.class)
+                .hasMessage("Account with id 99 not found");
     }
 }

@@ -14,8 +14,7 @@ import java.math.BigDecimal;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class TransferRequestValidationTest {
 
@@ -42,31 +41,33 @@ class TransferRequestValidationTest {
 
     @Test
     void validRequestHasNoViolations() {
-        assertTrue(violatedProperties(new TransferRequest(1L, 2L, new BigDecimal("100"))).isEmpty());
+        assertThat(violatedProperties(new TransferRequest(1L, 2L, new BigDecimal("100")))).isEmpty();
     }
 
     @Test
     void sameSourceAndTargetIsRejected() {
-        assertEquals(Set.of("differentAccounts"),
-                violatedProperties(new TransferRequest(1L, 1L, new BigDecimal("100"))));
+        assertThat(violatedProperties(new TransferRequest(1L, 1L, new BigDecimal("100"))))
+                .containsExactlyInAnyOrder("differentAccounts");
     }
 
     @Test
     void nonPositiveIdsAreRejected() {
-        assertEquals(Set.of("sourceId", "targetId"),
-                violatedProperties(new TransferRequest(0L, -3L, new BigDecimal("100"))));
+        assertThat(violatedProperties(new TransferRequest(0L, -3L, new BigDecimal("100"))))
+                .containsExactlyInAnyOrder("sourceId", "targetId");
     }
 
     @Test
     void nonPositiveAmountIsRejected() {
-        assertEquals(Set.of("amount"), violatedProperties(new TransferRequest(1L, 2L, BigDecimal.ZERO)));
-        assertEquals(Set.of("amount"), violatedProperties(new TransferRequest(1L, 2L, new BigDecimal("-0.01"))));
+        assertThat(violatedProperties(new TransferRequest(1L, 2L, BigDecimal.ZERO)))
+                .containsExactlyInAnyOrder("amount");
+        assertThat(violatedProperties(new TransferRequest(1L, 2L, new BigDecimal("-0.01"))))
+                .containsExactlyInAnyOrder("amount");
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"100.5", "100.50", "0.01", "999999999999999.99"})
     void amountWithinDigitLimitsIsAccepted(String amount) {
-        assertTrue(violatedProperties(new TransferRequest(1L, 2L, new BigDecimal(amount))).isEmpty());
+        assertThat(violatedProperties(new TransferRequest(1L, 2L, new BigDecimal(amount)))).isEmpty();
     }
 
     @ParameterizedTest
@@ -77,12 +78,13 @@ class TransferRequestValidationTest {
             "1000000000000000.00"   // 16 integer digits
     })
     void amountOutsideDigitLimitsIsRejected(String amount) {
-        assertEquals(Set.of("amount"), violatedProperties(new TransferRequest(1L, 2L, new BigDecimal(amount))));
+        assertThat(violatedProperties(new TransferRequest(1L, 2L, new BigDecimal(amount))))
+                .containsExactlyInAnyOrder("amount");
     }
 
     @Test
     void nullFieldsAreRejectedWithoutSameAccountViolation() {
-        assertEquals(Set.of("sourceId", "targetId", "amount"),
-                violatedProperties(new TransferRequest(null, null, null)));
+        assertThat(violatedProperties(new TransferRequest(null, null, null)))
+                .containsExactlyInAnyOrder("sourceId", "targetId", "amount");
     }
 }

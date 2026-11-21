@@ -9,8 +9,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AccountTest {
 
@@ -22,8 +22,8 @@ class AccountTest {
 
     private static void assertState(Account account, String balance, String used) {
         // equals() checks scale too, so these also verify 2 decimal places
-        assertEquals(new BigDecimal(balance), account.getBalance());
-        assertEquals(new BigDecimal(used), account.getLimits().getUsed());
+        assertThat(account.getBalance()).isEqualTo(new BigDecimal(balance));
+        assertThat(account.getLimits().getUsed()).isEqualTo(new BigDecimal(used));
     }
 
     @Test
@@ -37,7 +37,7 @@ class AccountTest {
 
     @Test
     void constructorNormalizesBalance() {
-        assertEquals(new BigDecimal("100.00"), account("100").getBalance());
+        assertThat(account("100").getBalance()).isEqualTo(new BigDecimal("100.00"));
     }
 
     @Test
@@ -62,10 +62,9 @@ class AccountTest {
     void debitAboveBalanceIsRejectedAndStateUnchanged() {
         Account account = account("500");
 
-        InsufficientFundsException ex = assertThrows(InsufficientFundsException.class,
-                () -> account.debit(new BigDecimal("500.01"), CLOCK));
-
-        assertEquals("Account 1 has insufficient funds: requested 500.01, available 500.00", ex.getMessage());
+        assertThatThrownBy(() -> account.debit(new BigDecimal("500.01"), CLOCK))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Account 1 has insufficient funds: requested 500.01, available 500.00");
         assertState(account, "500.00", "0.00");
     }
 
@@ -73,10 +72,9 @@ class AccountTest {
     void debitAboveRemainingLimitIsRejectedAndStateUnchanged() {
         Account account = account("20000");
 
-        TransferLimitExceededException ex = assertThrows(TransferLimitExceededException.class,
-                () -> account.debit(new BigDecimal("10000.01"), CLOCK));
-
-        assertEquals("Account 1 transfer limit exceeded: requested 10000.01, remaining limit 10000.00", ex.getMessage());
+        assertThatThrownBy(() -> account.debit(new BigDecimal("10000.01"), CLOCK))
+                .isInstanceOf(TransferLimitExceededException.class)
+                .hasMessage("Account 1 transfer limit exceeded: requested 10000.01, remaining limit 10000.00");
         assertState(account, "20000.00", "0.00");
     }
 
@@ -85,6 +83,7 @@ class AccountTest {
         // Both rules are broken: the limit violation wins.
         Account account = account("500");
 
-        assertThrows(TransferLimitExceededException.class, () -> account.debit(new BigDecimal("10000.01"), CLOCK));
+        assertThatThrownBy(() -> account.debit(new BigDecimal("10000.01"), CLOCK))
+                .isInstanceOf(TransferLimitExceededException.class);
     }
 }

@@ -30,7 +30,7 @@ import java.util.List;
 
 import static com.example.banking.controller.TestHeaders.CORRELATION_ID;
 import static com.example.banking.controller.TestHeaders.withValidHeaders;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -88,9 +88,9 @@ class AccountControllerTest {
                 .andExpect(status().isOk());
 
         Pageable pageable = capturedPageable();
-        assertEquals(1, pageable.getPageNumber());
-        assertEquals(5, pageable.getPageSize());
-        assertEquals(Sort.by(Sort.Direction.ASC, "amount"), pageable.getSort());
+        assertThat(pageable.getPageNumber()).isEqualTo(1);
+        assertThat(pageable.getPageSize()).isEqualTo(5);
+        assertThat(pageable.getSort()).isEqualTo(Sort.by(Sort.Direction.ASC, "amount"));
     }
 
     @Test
@@ -99,9 +99,9 @@ class AccountControllerTest {
                 .andExpect(status().isOk());
 
         Pageable pageable = capturedPageable();
-        assertEquals(0, pageable.getPageNumber());
-        assertEquals(20, pageable.getPageSize());
-        assertEquals(Sort.by(Sort.Direction.DESC, "timestamp"), pageable.getSort());
+        assertThat(pageable.getPageNumber()).isZero();
+        assertThat(pageable.getPageSize()).isEqualTo(20);
+        assertThat(pageable.getSort()).isEqualTo(Sort.by(Sort.Direction.DESC, "timestamp"));
     }
 
     @Test
@@ -109,7 +109,7 @@ class AccountControllerTest {
         mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/transfers?size=100")))
                 .andExpect(status().isOk());
 
-        assertEquals(100, capturedPageable().getPageSize());
+        assertThat(capturedPageable().getPageSize()).isEqualTo(100);
     }
 
     @ParameterizedTest

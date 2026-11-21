@@ -19,8 +19,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Runs against Testcontainers Postgres built from schema.sql + data.sql; each test rolls back. */
 @DataJpaTest
@@ -41,25 +42,26 @@ class AccountRepositoryIntegrationTest {
     void seedDataLoadsTwoAccounts() {
         List<Account> accounts = accountRepository.findAll();
 
-        assertEquals(2, accounts.size());
+        assertThat(accounts).hasSize(2);
         Account first = accountRepository.findByAccountNumber(FIRST).orElseThrow();
         Account second = accountRepository.findByAccountNumber(SECOND).orElseThrow();
-        assertEquals(new BigDecimal("5000.00"), first.getBalance());
-        assertEquals(new BigDecimal("1000.00"), second.getBalance());
-        assertEquals(new BigDecimal("10000.00"), first.getLimits().getRemaining());
+        assertThat(first.getBalance()).isEqualTo(new BigDecimal("50000.00"));
+        assertThat(second.getBalance()).isEqualTo(new BigDecimal("1000.00"));
+        assertThat(first.getLimits().getRemaining()).isEqualTo(new BigDecimal("20000.00"));
     }
 
     @Test
     void dailyLimitResetAtRoundTripsWithoutChangingTheDay() {
         Account account = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        assertEquals(Instant.parse("2026-11-11T00:00:00Z"), account.getLimits().getResetAt()); // seeded as already expired
+        assertThat(account.getLimits().getResetAt())
+                .isEqualTo(Instant.parse("2026-11-11T00:00:00Z")); // seeded as already expired
 
         account.debit(new BigDecimal("1.00"), Clock.fixed(NOW, ZoneOffset.UTC)); // starts a new window ending today
         accountRepository.flush();
         entityManager.clear();
 
         Account reloaded = accountRepository.findByAccountNumber(FIRST).orElseThrow();
-        assertEquals(Instant.parse("2026-11-12T23:59:59.999999Z"), reloaded.getLimits().getResetAt());
+        assertThat(reloaded.getLimits().getResetAt()).isEqualTo(Instant.parse("2026-11-12T23:59:59.999999Z"));
     }
 
     @Test
@@ -70,7 +72,7 @@ class AccountRepositoryIntegrationTest {
         account.credit(new BigDecimal("1.00"));
         accountRepository.flush();
 
-        assertEquals(before + 1, account.getVersion());
+        assertThat(account.getVersion()).isEqualTo(before + 1);
     }
 
     @Test
@@ -83,7 +85,7 @@ class AccountRepositoryIntegrationTest {
 
         account.credit(new BigDecimal("1.00"));
 
-        assertThrows(OptimisticLockingFailureException.class, accountRepository::flush);
+        assertThatThrownBy(accountRepository::flush).isInstanceOf(OptimisticLockingFailureException.class);
     }
 
     @ParameterizedTest
@@ -92,9 +94,10 @@ class AccountRepositoryIntegrationTest {
         Account account = new Account(null, accountNumber, new BigDecimal("100.00"), new Limits());
 
         // Bean Validation (@Size) runs when Hibernate flushes, before any SQL is sent.
-        ConstraintViolationException ex = assertThrows(ConstraintViolationException.class,
-                () -> accountRepository.saveAndFlush(account));
-
-        assertEquals("accountNumber", ex.getConstraintViolations().iterator().next().getPropertyPath().toString());
+        assertThatExceptionOfType(ConstraintViolationException.class)
+                .isThrownBy(() -> accountRepository.saveAndFlush(account))
+                .satisfies(ex -> assertThat(ex.getConstraintViolations())
+                        .extracting(violation -> violation.getPropertyPath().toString())
+                        .containsExactly("accountNumber"));
     }
 }

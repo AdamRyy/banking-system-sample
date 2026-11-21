@@ -20,8 +20,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /** Runs against Testcontainers Postgres built from schema.sql + data.sql; each test rolls back. */
 @DataJpaTest
@@ -49,11 +49,11 @@ class TransferHistoryIntegrationTest {
         entityManager.clear(); // force a real read from the database, not the persistence context
 
         TransferHistory loaded = historyRepository.findById(id).orElseThrow();
-        assertEquals(FIRST, loaded.getAccount().getAccountNumber());
-        assertEquals(SECOND, loaded.getCounterpartyAccountNumber());
-        assertEquals(new BigDecimal("100.50"), loaded.getAmount());
-        assertEquals(NOW, loaded.getTimestamp());
-        assertEquals(TransferDirection.OUTGOING, loaded.getDirection());
+        assertThat(loaded.getAccount().getAccountNumber()).isEqualTo(FIRST);
+        assertThat(loaded.getCounterpartyAccountNumber()).isEqualTo(SECOND);
+        assertThat(loaded.getAmount()).isEqualTo(new BigDecimal("100.50"));
+        assertThat(loaded.getTimestamp()).isEqualTo(NOW);
+        assertThat(loaded.getDirection()).isEqualTo(TransferDirection.OUTGOING);
     }
 
     @Test
@@ -73,12 +73,12 @@ class TransferHistoryIntegrationTest {
         Page<TransferHistory> second = historyRepository.findByAccountId(source.getId(),
                 PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "timestamp")));
 
-        assertEquals(3, first.getTotalElements());
-        assertEquals(2, first.getTotalPages());
-        assertEquals(List.of(new BigDecimal("20.00"), new BigDecimal("30.00")),
-                first.getContent().stream().map(TransferHistory::getAmount).toList());
-        assertEquals(List.of(new BigDecimal("10.00")),
-                second.getContent().stream().map(TransferHistory::getAmount).toList());
+        assertThat(first.getTotalElements()).isEqualTo(3);
+        assertThat(first.getTotalPages()).isEqualTo(2);
+        assertThat(first.getContent()).extracting(TransferHistory::getAmount)
+                .containsExactly(new BigDecimal("20.00"), new BigDecimal("30.00"));
+        assertThat(second.getContent()).extracting(TransferHistory::getAmount)
+                .containsExactly(new BigDecimal("10.00"));
     }
 
     @ParameterizedTest
@@ -88,9 +88,10 @@ class TransferHistoryIntegrationTest {
         TransferHistory history = source.recordTransfer(SECOND, new BigDecimal(amount),
                 NOW, TransferDirection.OUTGOING);
 
-        ConstraintViolationException ex = assertThrows(ConstraintViolationException.class,
-                () -> historyRepository.saveAndFlush(history));
-
-        assertEquals("amount", ex.getConstraintViolations().iterator().next().getPropertyPath().toString());
+        assertThatExceptionOfType(ConstraintViolationException.class)
+                .isThrownBy(() -> historyRepository.saveAndFlush(history))
+                .satisfies(ex -> assertThat(ex.getConstraintViolations())
+                        .extracting(violation -> violation.getPropertyPath().toString())
+                        .containsExactly("amount"));
     }
 }
