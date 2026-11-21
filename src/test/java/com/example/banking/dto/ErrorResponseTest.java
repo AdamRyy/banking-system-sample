@@ -7,7 +7,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class ErrorResponseTest {
 
@@ -19,51 +19,51 @@ class ErrorResponseTest {
     void ofSetsCodeMessageAndTimestampWithoutCorrelationId() {
         ErrorResponse response = ErrorResponse.of(ErrorCode.INSUFFICIENT_FUNDS, "no money", null, NOW);
 
-        assertEquals("INSUFFICIENT_FUNDS", response.code());
-        assertEquals("no money", response.message());
-        assertEquals(NOW, response.timestamp());
-        assertNull(response.correlationId());
+        assertThat(response.code()).isEqualTo("INSUFFICIENT_FUNDS");
+        assertThat(response.message()).isEqualTo("no money");
+        assertThat(response.timestamp()).isEqualTo(NOW);
+        assertThat(response.correlationId()).isNull();
     }
 
     @Test
     void ofCarriesTheGivenCorrelationId() {
-        assertEquals("abc-123", ErrorResponse.of(ErrorCode.NOT_FOUND, "x", "abc-123", NOW).correlationId());
+        assertThat(ErrorResponse.of(ErrorCode.NOT_FOUND, "x", "abc-123", NOW).correlationId()).isEqualTo("abc-123");
     }
 
     @Test
     void ofStatusUsesTheStatusNameAsCode() {
-        assertEquals("NOT_ACCEPTABLE", ErrorResponse.of(HttpStatus.NOT_ACCEPTABLE, "x", null, NOW).code());
+        assertThat(ErrorResponse.of(HttpStatus.NOT_ACCEPTABLE, "x", null, NOW).code()).isEqualTo("NOT_ACCEPTABLE");
     }
 
     @Test
     void forStatusHidesDetailsOfServerErrors() {
         ErrorResponse response = ErrorResponse.forStatus(HttpStatus.SERVICE_UNAVAILABLE, null, NOW);
 
-        assertEquals("INTERNAL_ERROR", response.code());
-        assertEquals("An unexpected error occurred", response.message());
-        assertEquals(NOW, response.timestamp());
+        assertThat(response.code()).isEqualTo("INTERNAL_ERROR");
+        assertThat(response.message()).isEqualTo("An unexpected error occurred");
+        assertThat(response.timestamp()).isEqualTo(NOW);
     }
 
     @Test
     void timestampIsSerializedAsIsoUtc() {
         String json = mapper.writeValueAsString(ErrorResponse.of(ErrorCode.NOT_FOUND, "x", null, NOW));
 
-        assertTrue(json.contains("\"timestamp\":\"2026-11-04T08:00:00Z\""), json);
+        assertThat(json).contains("\"timestamp\":\"2026-11-04T08:00:00Z\"");
     }
 
     @Test
     void nullCorrelationIdIsOmittedFromJson() {
         String json = mapper.writeValueAsString(ErrorResponse.of(ErrorCode.NOT_FOUND, "x", null, NOW));
 
-        assertFalse(json.contains("X-Correlation-Id"), json);
-        assertFalse(json.contains("correlationId"), json);
+        assertThat(json).doesNotContain("X-Correlation-Id", "correlationId");
     }
 
     @Test
     void correlationIdIsSerializedAsHeaderStyleKey() {
         String json = mapper.writeValueAsString(new ErrorResponse("NOT_FOUND", "x", NOW, "abc-123"));
 
-        assertTrue(json.contains("\"X-Correlation-Id\":\"abc-123\""), json);
-        assertFalse(json.contains("correlationId"), json);
+        assertThat(json)
+                .contains("\"X-Correlation-Id\":\"abc-123\"")
+                .doesNotContain("correlationId");
     }
 }

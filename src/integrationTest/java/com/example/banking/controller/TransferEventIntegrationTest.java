@@ -37,10 +37,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.example.banking.controller.TestHeaders.withValidHeaders;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -83,7 +80,7 @@ class TransferEventIntegrationTest {
         // and auto-offset-reset=earliest would then replay older records.
         Instant deadline = Instant.now().plusSeconds(30);
         while (consumer.assignment().isEmpty()) {
-            assertTrue(Instant.now().isBefore(deadline), "no partitions assigned within 30s");
+            assertThat(Instant.now()).as("no partitions assigned within 30s").isBefore(deadline);
             consumer.poll(Duration.ofMillis(200));
         }
         consumer.seekToEnd(consumer.assignment());
@@ -106,7 +103,7 @@ class TransferEventIntegrationTest {
     private static void awaitOutput(CapturedOutput output, String expected) throws InterruptedException {
         Instant deadline = Instant.now().plusSeconds(30);
         while (!output.getOut().contains(expected)) {
-            assertTrue(Instant.now().isBefore(deadline), "not logged within 30s: " + expected);
+            assertThat(Instant.now()).as("not logged within 30s: %s", expected).isBefore(deadline);
             Thread.sleep(200);
         }
     }
@@ -125,7 +122,9 @@ class TransferEventIntegrationTest {
                 if (committed != null && committed.offset() > record.offset()) {
                     return;
                 }
-                assertTrue(Instant.now().isBefore(deadline), FraudDetectionConsumer.GROUP_ID + " didn't process the record within 30s");
+                assertThat(Instant.now())
+                        .as("%s didn't process the record within 30s", FraudDetectionConsumer.GROUP_ID)
+                        .isBefore(deadline);
                 Thread.sleep(200);
             }
         }
@@ -143,23 +142,23 @@ class TransferEventIntegrationTest {
         ConsumerRecord<String, TransferCompletedEvent> record =
                 KafkaTestUtils.getSingleRecord(consumer, KafkaConfig.BANK_TRANSFERS_TOPIC, Duration.ofSeconds(10));
 
-        assertEquals(SOURCE_ACCOUNT, record.key());
+        assertThat(record.key()).isEqualTo(SOURCE_ACCOUNT);
         TransferCompletedEvent event = record.value();
         // Other tests in this context commit too, so match the row by amount. Its id is the transferId.
         List<TransferHistory> outgoing = transferHistoryRepository.findAll().stream()
                 .filter(row -> row.getDirection() == TransferDirection.OUTGOING)
                 .filter(row -> row.getAmount().compareTo(new BigDecimal("250.00")) == 0)
                 .toList();
-        assertEquals(1, outgoing.size());
-        assertEquals(outgoing.getFirst().getId(), event.transferId());
-        assertEquals(SOURCE_ACCOUNT, event.sourceAccountNumber());
-        assertEquals(TARGET_ACCOUNT, event.targetAccountNumber());
-        assertEquals(0, new BigDecimal("250.00").compareTo(event.amount()));
-        assertNotNull(event.timestamp());
+        assertThat(outgoing).hasSize(1);
+        assertThat(event.transferId()).isEqualTo(outgoing.getFirst().getId());
+        assertThat(event.sourceAccountNumber()).isEqualTo(SOURCE_ACCOUNT);
+        assertThat(event.targetAccountNumber()).isEqualTo(TARGET_ACCOUNT);
+        assertThat(event.amount()).isEqualByComparingTo("250.00");
+        assertThat(event.timestamp()).isNotNull();
 
         awaitOutput(output, "Transfer " + event.transferId() + " completed.");
         awaitProcessed(record);
-        assertFalse(output.getOut().contains(fraudAlertFor(event.transferId())));   // below the fraud threshold
+        assertThat(output.getOut()).doesNotContain(fraudAlertFor(event.transferId()));   // below the fraud threshold
     }
 
     @Test
@@ -178,6 +177,6 @@ class TransferEventIntegrationTest {
     void rejectedTransferPublishesNothing() throws Exception {
         transfer("999999.00", 422);   // more than the balance: rolled back
 
-        assertTrue(KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(3)).isEmpty());
+        assertThat(KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(3))).isEmpty();
     }
 }

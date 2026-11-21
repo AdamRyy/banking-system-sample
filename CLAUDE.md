@@ -25,6 +25,8 @@ Transfers change the data until the app restarts, so run manual requests against
 ## Conventions
 
 - **Comments:** keep Javadoc and comments short, and add them only where the code is complicated or misleading (e.g. a hidden lazy load, no `save()` because of dirty checking). Don't comment code that already explains itself.
+- **Test assertions:** AssertJ (`assertThat`, `assertThatThrownBy`), not JUnit `Assertions`. Money compared with
+  `isEqualTo` also checks scale (2 places); use `isEqualByComparingTo` only when the scale doesn't matter.
 - **Database schema:** `schema.sql` holds only basic constraints: PRIMARY KEY, NOT NULL, UNIQUE, FOREIGN KEY, DEFAULT. No CHECK constraints and no native ENUM types. Business rules (lengths, ranges, allowed values) live in Java: Bean Validation on the entities (runs at flush) or domain methods. Enums are `VARCHAR` columns, mapped with `@Enumerated(EnumType.STRING)` + `@JdbcTypeCode(SqlTypes.VARCHAR)`. Index names start with `idx_`.
 
 ## Architecture

@@ -25,9 +25,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import static com.example.banking.controller.TestHeaders.withValidHeaders;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -83,27 +81,27 @@ class TransferIntegrationTest {
                 .andExpect(jsonPath("$.accBalance").value(49900.00))
                 .andExpect(jsonPath("$.remainingLimit").value(19900.00));
 
-        assertEquals(new BigDecimal("49900.00"), balanceOf(1));
-        assertEquals(new BigDecimal("1100.00"), balanceOf(2));
+        assertThat(balanceOf(1)).isEqualTo(new BigDecimal("49900.00"));
+        assertThat(balanceOf(2)).isEqualTo(new BigDecimal("1100.00"));
 
         List<TransferHistory> history = history().stream()
                 .sorted(Comparator.comparing(h -> h.getAccount().getId()))
                 .toList();
-        assertEquals(2, history.size());
+        assertThat(history).hasSize(2);
 
         TransferHistory outgoing = history.getFirst();
-        assertEquals(1L, outgoing.getAccount().getId());
-        assertEquals(TransferDirection.OUTGOING, outgoing.getDirection());
-        assertEquals("65432109876543210987654321", outgoing.getCounterpartyAccountNumber());
-        assertEquals(new BigDecimal("100.00"), outgoing.getAmount());
-        assertNotNull(outgoing.getTimestamp());   // real system clock: only check it was set
+        assertThat(outgoing.getAccount().getId()).isEqualTo(1L);
+        assertThat(outgoing.getDirection()).isEqualTo(TransferDirection.OUTGOING);
+        assertThat(outgoing.getCounterpartyAccountNumber()).isEqualTo("65432109876543210987654321");
+        assertThat(outgoing.getAmount()).isEqualTo(new BigDecimal("100.00"));
+        assertThat(outgoing.getTimestamp()).isNotNull();   // real system clock: only check it was set
 
         TransferHistory incoming = history.get(1);
-        assertEquals(2L, incoming.getAccount().getId());
-        assertEquals(TransferDirection.INCOMING, incoming.getDirection());
-        assertEquals("12345678901234567890123456", incoming.getCounterpartyAccountNumber());
-        assertEquals(new BigDecimal("100.00"), incoming.getAmount());
-        assertEquals(outgoing.getTimestamp(), incoming.getTimestamp());
+        assertThat(incoming.getAccount().getId()).isEqualTo(2L);
+        assertThat(incoming.getDirection()).isEqualTo(TransferDirection.INCOMING);
+        assertThat(incoming.getCounterpartyAccountNumber()).isEqualTo("12345678901234567890123456");
+        assertThat(incoming.getAmount()).isEqualTo(new BigDecimal("100.00"));
+        assertThat(incoming.getTimestamp()).isEqualTo(outgoing.getTimestamp());
 
         mockMvc.perform(withValidHeaders(get("/api/v1/accounts/1/limits")))
                 .andExpect(status().isOk())
@@ -165,8 +163,8 @@ class TransferIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2));
 
-        assertEquals(3, stats.getPrepareStatementCount());   // existsById + page select + count
-        assertEquals(2, stats.getEntityLoadCount());          // the 2 history rows; no Account was loaded
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(3);   // existsById + page select + count
+        assertThat(stats.getEntityLoadCount()).isEqualTo(2);          // the 2 history rows; no Account was loaded
     }
 
     @Test
@@ -175,8 +173,8 @@ class TransferIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_NOT_FOUND"));
 
-        assertEquals(new BigDecimal("50000.00"), balanceOf(1));
-        assertTrue(history().isEmpty());
+        assertThat(balanceOf(1)).isEqualTo(new BigDecimal("50000.00"));
+        assertThat(history()).isEmpty();
     }
 
     @Test
@@ -185,8 +183,8 @@ class TransferIntegrationTest {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("INSUFFICIENT_FUNDS"));
 
-        assertEquals(new BigDecimal("1000.00"), balanceOf(2));
-        assertEquals(new BigDecimal("50000.00"), balanceOf(1));
-        assertTrue(history().isEmpty());
+        assertThat(balanceOf(2)).isEqualTo(new BigDecimal("1000.00"));
+        assertThat(balanceOf(1)).isEqualTo(new BigDecimal("50000.00"));
+        assertThat(history()).isEmpty();
     }
 }

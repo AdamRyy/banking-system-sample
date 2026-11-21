@@ -7,9 +7,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class LimitsTest {
 
@@ -24,9 +22,9 @@ class LimitsTest {
     void newLimitsHaveNothingUsed() {
         Limits limits = new Limits();
 
-        assertEquals(new BigDecimal("10000.00"), limits.getLimit());
-        assertEquals(new BigDecimal("0.00"), limits.getUsed());
-        assertEquals(new BigDecimal("10000.00"), limits.getRemaining());
+        assertThat(limits.getLimit()).isEqualTo(new BigDecimal("10000.00"));
+        assertThat(limits.getUsed()).isEqualTo(new BigDecimal("0.00"));
+        assertThat(limits.getRemaining()).isEqualTo(new BigDecimal("10000.00"));
     }
 
     @Test
@@ -35,9 +33,9 @@ class LimitsTest {
 
         limits.use(new BigDecimal("1500.50"));
 
-        assertEquals(new BigDecimal("10000.00"), limits.getLimit());
-        assertEquals(new BigDecimal("1500.50"), limits.getUsed());
-        assertEquals(new BigDecimal("8499.50"), limits.getRemaining());
+        assertThat(limits.getLimit()).isEqualTo(new BigDecimal("10000.00"));
+        assertThat(limits.getUsed()).isEqualTo(new BigDecimal("1500.50"));
+        assertThat(limits.getRemaining()).isEqualTo(new BigDecimal("8499.50"));
     }
 
     @Test
@@ -46,8 +44,9 @@ class LimitsTest {
 
         for (String amount : new String[]{"0.01", "2500", "1234.56", "0.99"}) {
             limits.use(new BigDecimal(amount));
-            assertEquals(0, limits.getUsed().add(limits.getRemaining()).compareTo(limits.getLimit()),
-                    "used " + limits.getUsed() + " + remaining " + limits.getRemaining());
+            assertThat(limits.getUsed().add(limits.getRemaining()))
+                    .as("used %s + remaining %s", limits.getUsed(), limits.getRemaining())
+                    .isEqualByComparingTo(limits.getLimit());
         }
     }
 
@@ -55,12 +54,12 @@ class LimitsTest {
     void allowsUpToExactlyTheRemainingLimit() {
         Limits limits = new Limits();
 
-        assertTrue(limits.allow(new BigDecimal("10000")));
-        assertFalse(limits.allow(new BigDecimal("10000.01")));
+        assertThat(limits.allow(new BigDecimal("10000"))).isTrue();
+        assertThat(limits.allow(new BigDecimal("10000.01"))).isFalse();
 
         limits.use(new BigDecimal("9500.00"));
-        assertTrue(limits.allow(new BigDecimal("500.00")));
-        assertFalse(limits.allow(new BigDecimal("500.01")));
+        assertThat(limits.allow(new BigDecimal("500.00"))).isTrue();
+        assertThat(limits.allow(new BigDecimal("500.01"))).isFalse();
     }
 
     @Test
@@ -70,8 +69,8 @@ class LimitsTest {
 
         limits.resetIfExpired(clockAt(NOW));
 
-        assertEquals(new BigDecimal("0.00"), limits.getUsed());
-        assertEquals(END_OF_DAY, limits.getResetAt());
+        assertThat(limits.getUsed()).isEqualTo(new BigDecimal("0.00"));
+        assertThat(limits.getResetAt()).isEqualTo(END_OF_DAY);
     }
 
     @Test
@@ -82,8 +81,8 @@ class LimitsTest {
 
         limits.resetIfExpired(clockAt(END_OF_DAY)); // last instant of the window still counts
 
-        assertEquals(new BigDecimal("4000.00"), limits.getUsed());
-        assertEquals(END_OF_DAY, limits.getResetAt());
+        assertThat(limits.getUsed()).isEqualTo(new BigDecimal("4000.00"));
+        assertThat(limits.getResetAt()).isEqualTo(END_OF_DAY);
     }
 
     @Test
@@ -94,7 +93,7 @@ class LimitsTest {
 
         limits.resetIfExpired(clockAt(Instant.parse("2026-11-13T00:00:00Z")));
 
-        assertEquals(new BigDecimal("0.00"), limits.getUsed());
-        assertEquals(Instant.parse("2026-11-13T23:59:59.999999Z"), limits.getResetAt());
+        assertThat(limits.getUsed()).isEqualTo(new BigDecimal("0.00"));
+        assertThat(limits.getResetAt()).isEqualTo(Instant.parse("2026-11-13T23:59:59.999999Z"));
     }
 }

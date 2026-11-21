@@ -11,8 +11,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(OutputCaptureExtension.class)
 class FraudDetectionConsumerTest {
@@ -28,10 +27,8 @@ class FraudDetectionConsumerTest {
     void amountAboveThresholdRaisesAlert(CapturedOutput output) {
         consumer.on(event("15000.00"));
 
-        assertTrue(output.getOut().contains("[FRAUD ALERT]"));
-        assertTrue(output.getOut().contains("Suspicious transfer detected!"));
-        assertTrue(output.getOut().contains("Transfer ID: 101"));
-        assertTrue(output.getOut().contains("Amount: 15000.00 PLN"));
+        assertThat(output.getOut()).contains("[FRAUD ALERT]", "Suspicious transfer detected!", "Transfer ID: 101",
+                "Amount: 15000.00 PLN");
     }
 
     @ParameterizedTest
@@ -39,21 +36,22 @@ class FraudDetectionConsumerTest {
     void amountUpToThresholdIsNotSuspicious(String amount, CapturedOutput output) {
         consumer.on(event(amount));
 
-        assertFalse(output.getOut().contains("[FRAUD ALERT]"));
+        assertThat(output.getOut()).doesNotContain("[FRAUD ALERT]");
     }
 
     @Test
     void tombstoneIsSkipped(CapturedOutput output) {
         consumer.on(null);
 
-        assertTrue(output.getOut().contains("Skipping malformed TransferCompletedEvent"));
+        assertThat(output.getOut()).contains("Skipping malformed TransferCompletedEvent");
     }
 
     @Test
     void eventWithoutAmountIsSkipped(CapturedOutput output) {
         consumer.on(new TransferCompletedEvent(101L, null, null, null, null));   // what "{}" deserializes to
 
-        assertTrue(output.getOut().contains("Skipping malformed TransferCompletedEvent"));
-        assertFalse(output.getOut().contains("[FRAUD ALERT]"));
+        assertThat(output.getOut())
+                .contains("Skipping malformed TransferCompletedEvent")
+                .doesNotContain("[FRAUD ALERT]");
     }
 }

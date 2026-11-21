@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaAdmin;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @Import({TestcontainersConfiguration.class, KafkaTestcontainersConfiguration.class})
@@ -24,9 +24,9 @@ class KafkaTopicIntegrationTest {
         TopicDescription topic = kafkaAdmin.describeTopics(KafkaConfig.BANK_TRANSFERS_TOPIC)
                 .get(KafkaConfig.BANK_TRANSFERS_TOPIC);
 
-        assertEquals(3, topic.partitions().size());
+        assertThat(topic.partitions()).hasSize(3);
         for (TopicPartitionInfo partition : topic.partitions()) {
-            assertEquals(1, partition.replicas().size());
+            assertThat(partition.replicas()).hasSize(1);
         }
     }
 }

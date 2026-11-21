@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -56,6 +56,6 @@ class TransferEventPublisherTest {
         when(kafkaTemplate.send("bank-transfers", event.sourceAccountNumber(), event))
                 .thenThrow(new KafkaException("Topic bank-transfers not present in metadata"));
 
-        assertDoesNotThrow(() -> publisher.on(event));
+        assertThatNoException().isThrownBy(() -> publisher.on(event));
     }
 }

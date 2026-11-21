@@ -28,8 +28,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -63,8 +63,8 @@ class TransferHistoryServiceTest {
     void unknownAccountThrowsWithoutQueryingHistory() {
         when(accountRepository.existsById(99L)).thenReturn(false);
 
-        assertThrows(AccountNotFoundException.class,
-                () -> transferHistoryService.getTransferHistory(99L, PageRequest.of(0, 10)));
+        assertThatThrownBy(() -> transferHistoryService.getTransferHistory(99L, PageRequest.of(0, 10)))
+                .isInstanceOf(AccountNotFoundException.class);
 
         verifyNoInteractions(transferHistoryRepository);
     }
@@ -74,11 +74,11 @@ class TransferHistoryServiceTest {
     void disallowedSortPropertyThrows(String property) {
         when(accountRepository.existsById(1L)).thenReturn(true);
 
-        InvalidSortException ex = assertThrows(InvalidSortException.class,
-                () -> transferHistoryService.getTransferHistory(1L, PageRequest.of(0, 10, Sort.by(property))));
-
-        assertEquals("sort: unknown property '%s' (allowed: amount, counterpartyAccountNumber, direction, id, timestamp)"
-                .formatted(property), ex.getMessage());
+        assertThatThrownBy(() -> transferHistoryService.getTransferHistory(1L,
+                PageRequest.of(0, 10, Sort.by(property))))
+                .isInstanceOf(InvalidSortException.class)
+                .hasMessage("sort: unknown property '%s' "
+                        + "(allowed: amount, counterpartyAccountNumber, direction, id, timestamp)", property);
         verifyNoInteractions(transferHistoryRepository);
     }
 
@@ -90,9 +90,9 @@ class TransferHistoryServiceTest {
         transferHistoryService.getTransferHistory(1L, PageRequest.of(2, 5, Sort.by(Sort.Direction.DESC, "timestamp")));
 
         Pageable pageable = queriedPageable();
-        assertEquals(2, pageable.getPageNumber());
-        assertEquals(5, pageable.getPageSize());
-        assertEquals(Sort.by(Sort.Order.desc("timestamp"), Sort.Order.desc("id")), pageable.getSort());
+        assertThat(pageable.getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getPageSize()).isEqualTo(5);
+        assertThat(pageable.getSort()).isEqualTo(Sort.by(Sort.Order.desc("timestamp"), Sort.Order.desc("id")));
     }
 
     @Test
@@ -102,7 +102,7 @@ class TransferHistoryServiceTest {
 
         transferHistoryService.getTransferHistory(1L, PageRequest.of(0, 5, Sort.by(Sort.Direction.ASC, "id")));
 
-        assertEquals(Sort.by(Sort.Direction.ASC, "id"), queriedPageable().getSort());
+        assertThat(queriedPageable().getSort()).isEqualTo(Sort.by(Sort.Direction.ASC, "id"));
     }
 
     @Test
@@ -116,7 +116,7 @@ class TransferHistoryServiceTest {
 
         PageResponse<TransferHistoryResponse> result = transferHistoryService.getTransferHistory(1L, request);
 
-        assertEquals(new PageResponse<>(List.of(new TransferHistoryResponse(null, TransferDirection.OUTGOING,
-                "65432109876543210987654321", new BigDecimal("100.00"), NOW)), 0, 1, 3, 3), result);
+        assertThat(result).isEqualTo(new PageResponse<>(List.of(new TransferHistoryResponse(null,
+                TransferDirection.OUTGOING, "65432109876543210987654321", new BigDecimal("100.00"), NOW)), 0, 1, 3, 3));
     }
 }
